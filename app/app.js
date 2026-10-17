@@ -286,7 +286,11 @@ function actualizarSugerencias() {
  * detalle) y, si se pide, un botón chico a la derecha (borrar o sacar).
  * Usamos textContent (no innerHTML) porque los nombres los escribe el usuario.
  */
-function crearItemCancion(cancion, { detalleExtra = "", accion = null } = {}) {
+//
+// "contexto" dice desde dónde se abre la canción: { tipo: "lista", idLista }
+// o { tipo: "todas" } (también para el buscador). Define el orden de
+// "siguiente" y "anterior" en el reproductor.
+function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" } } = {}) {
   const item = document.createElement("li");
   item.className = "cancion";
 
@@ -302,7 +306,7 @@ function crearItemCancion(cancion, { detalleExtra = "", accion = null } = {}) {
     linea.textContent = texto;
     abrir.appendChild(linea);
   }
-  abrir.addEventListener("click", () => abrirCancion(cancion.id));
+  abrir.addEventListener("click", () => abrirCancion(cancion.id, contexto));
   item.appendChild(abrir);
 
   if (accion) {
@@ -378,6 +382,7 @@ function dibujarSecciones() {
           etiqueta: `Sacar ${cancion.nombre} de ${listaCanc.nombre}`,
           alTocar: () => confirmarSacarDeLista(listaCanc, cancion),
         },
+        contexto: { tipo: "lista", idLista: listaCanc.id },
       }));
     }
     if (cancionesLista.length === 0) {
@@ -720,8 +725,12 @@ botonCancelarAnalisis.addEventListener("click", () => {
    Pantalla 3: reproductor
    ================================================================== */
 
+// Desde dónde se abrió la canción actual (ver crearItemCancion).
+let contextoActual = { tipo: "todas" };
+
 // Abre una canción de la biblioteca en el reproductor.
-async function abrirCancion(id) {
+async function abrirCancion(id, contexto = { tipo: "todas" }) {
+  contextoActual = contexto;
   if (await cargarCancion(id)) abrirPantalla("reproductor");
 }
 
@@ -748,7 +757,11 @@ async function cargarCancion(id) {
   indiceActual = -1;
 
   // Creamos una URL temporal que apunta al mp3 guardado y se la damos al reproductor.
+  reiniciarMetronomo();
   audio.src = URL.createObjectURL(mp3);
+  // Velocidad guardada para esta canción. Hay que ponerla DESPUÉS de cambiar
+  // el src, porque al cargar un audio nuevo el navegador la vuelve a x1.
+  aplicarVelocidad(cancion.velocidad || 1);
 
   const detalle = detalleCancion(cancion);
   titulo.textContent = detalle ? `${cancion.nombre} · ${detalle}` : cancion.nombre;
@@ -762,6 +775,7 @@ async function cargarCancion(id) {
   prepararPulsos(cancion);
   mostrarDiagramas();
   actualizar();
+  mostrarPosicionEnLista();
   return true;
 }
 
@@ -826,11 +840,382 @@ botonReanalizar.addEventListener("click", async () => {
 function cerrarReproductor() {
   if (idActual === null) return;
   audio.pause();
+  reiniciarMetronomo();
   URL.revokeObjectURL(audio.src);
   audio.removeAttribute("src");
   audio.load();
   idActual = null;
   acordes = [];
+}
+
+/* ==================================================================
+   Canción siguiente y anterior
+
+   El orden sale de la lista desde la que se abrió la canción, o de
+   "Todas las canciones" (por nombre) si se abrió desde ahí o desde el
+   buscador. Siempre se lee de la base, por si algo cambió mientras tanto.
+   ================================================================== */
+
+const botonAnterior = document.getElementById("boton-anterior");
+const botonSiguiente = document.getElementById("boton-siguiente");
+const posicionLista = document.getElementById("posicion-lista");
+
+// Nombre y orden de canciones (ids) de un contexto.
+function ordenDe(contexto, canciones, listas) {
+  const existen = new Set(canciones.map((c) => c.id));
+  if (contexto.tipo === "lista") {
+    const listaCanc = listas.find((l) => l.id === contexto.idLista);
+    if (listaCanc) {
+      return { nombre: listaCanc.nombre, ids: listaCanc.canciones.filter((id) => existen.has(id)) };
+    }
+  }
+  // listarCanciones ya las devuelve ordenadas por nombre, como en la pantalla de inicio.
+  return { nombre: "Todas las canciones", ids: canciones.map((c) => c.id) };
+}
+
+const mismoContexto = (a, b) => a.tipo === b.tipo && (a.tipo !== "lista" || a.idLista === b.idLista);
+
+// La canción vecina en la misma lista (paso = +1 siguiente, -1 anterior), o null.
+function vecina(paso, canciones, listas) {
+  const { ids } = ordenDe(contextoActual, canciones, listas);
+  const j = ids.indexOf(idActual) + paso;
+  if (ids.indexOf(idActual) < 0 || j < 0 || j >= ids.length) return null;
+  return { id: ids[j], contexto: contextoActual };
+}
+
+// Para la reproducción continua: la primera canción de la lista siguiente
+// (en el orden de la pantalla de inicio, con "Todas las canciones" al final),
+// salteando las listas vacías. null si no hay más.
+function primeraDeListaSiguiente(canciones, listas) {
+  const contextos = [...listas.map((l) => ({ tipo: "lista", idLista: l.id })), { tipo: "todas" }];
+  const actual = contextos.findIndex((c) => mismoContexto(c, contextoActual));
+  for (let k = actual + 1; k < contextos.length; k++) {
+    const { ids } = ordenDe(contextos[k], canciones, listas);
+    if (ids.length) return { id: ids[0], contexto: contextos[k] };
+  }
+  return null;
+}
+
+// Hacia dónde va "siguiente": la vecina, o con reproducción continua la
+// primera de la lista siguiente cuando se termina la lista.
+function destinoSiguiente(canciones, listas) {
+  return vecina(+1, canciones, listas)
+    || (reproduccionContinua ? primeraDeListaSiguiente(canciones, listas) : null);
+}
+
+async function leerBiblioteca() {
+  const [canciones, listas] = await Promise.all([listarCanciones(), listarListas()]);
+  return { canciones, listas };
+}
+
+// Muestra "Airbag · 3 de 12" y habilita o no los botones.
+async function mostrarPosicionEnLista() {
+  const id = idActual;
+  // Borramos la de la canción anterior mientras leemos la base.
+  posicionLista.textContent = "";
+  let datos;
+  try {
+    datos = await leerBiblioteca();
+  } catch {
+    return;
+  }
+  if (id !== idActual) return;   // mientras leíamos se cambió de canción
+  const { nombre, ids } = ordenDe(contextoActual, datos.canciones, datos.listas);
+  const posicion = ids.indexOf(idActual);
+  posicionLista.textContent = posicion >= 0 ? `${nombre} · ${posicion + 1} de ${ids.length}` : nombre;
+  botonAnterior.disabled = !vecina(-1, datos.canciones, datos.listas);
+  botonSiguiente.disabled = !destinoSiguiente(datos.canciones, datos.listas);
+}
+
+// Cambia a otra canción sin salir del reproductor. Si "reproducir" es
+// true, arranca a sonar apenas se carga.
+async function irACancion(destino, reproducir) {
+  contextoActual = destino.contexto;
+  if (!(await cargarCancion(destino.id))) return;
+  if (reproducir) reproducirCancion();
+}
+
+async function pasarDeCancion(paso) {
+  const seguia = !audio.paused;   // si estaba sonando, la nueva también suena
+  const { canciones, listas } = await leerBiblioteca();
+  const destino = paso > 0 ? destinoSiguiente(canciones, listas) : vecina(-1, canciones, listas);
+  if (destino) await irACancion(destino, seguia);
+}
+
+botonAnterior.addEventListener("click", () => pasarDeCancion(-1));
+botonSiguiente.addEventListener("click", () => pasarDeCancion(+1));
+
+// Reproducción continua: al terminar una canción, empieza la siguiente.
+audio.addEventListener("ended", async () => {
+  if (!reproduccionContinua) return;
+  const { canciones, listas } = await leerBiblioteca();
+  const destino = destinoSiguiente(canciones, listas);
+  if (destino) await irACancion(destino, true);
+});
+
+/* ==================================================================
+   Sonido: volumen de la canción, metrónomo y velocidad
+
+   La canción y el metrónomo pasan por el mismo AudioContext (Web Audio
+   API). Así salen por el mismo camino, con la misma demora, y el clic no
+   se adelanta ni se atrasa respecto de la música. También nos da un
+   control de volumen propio para cada uno.
+   ================================================================== */
+
+const botonInicio = document.getElementById("boton-inicio");
+const botonMetronomo = document.getElementById("boton-metronomo");
+const botonMas = document.getElementById("boton-mas");
+const resumenOpciones = document.getElementById("resumen-opciones");
+const panelOpciones = document.getElementById("panel-opciones");
+const botonCerrarOpciones = document.getElementById("boton-cerrar-opciones");
+const botonesVelocidad = [...document.querySelectorAll("#velocidades button")];
+const volumenCancionControl = document.getElementById("volumen-cancion");
+const volumenMetronomoControl = document.getElementById("volumen-metronomo");
+const reproduccionContinuaControl = document.getElementById("reproduccion-continua");
+
+// Preferencias generales (no dependen de la canción), guardadas en el navegador.
+let metronomoPrendido = false;
+let volumenMetronomo = 0.7;
+let volumenCancion = 1;
+let reproduccionContinua = false;
+try {
+  const guardadas = JSON.parse(localStorage.getItem("preferenciasReproductor")) || {};
+  metronomoPrendido = guardadas.metronomoPrendido === true;
+  if (typeof guardadas.volumenMetronomo === "number") volumenMetronomo = guardadas.volumenMetronomo;
+  if (typeof guardadas.volumenCancion === "number") volumenCancion = guardadas.volumenCancion;
+  reproduccionContinua = guardadas.reproduccionContinua === true;
+} catch {
+  // sin localStorage: valores por defecto
+}
+
+function guardarPreferencias() {
+  try {
+    localStorage.setItem("preferenciasReproductor", JSON.stringify({
+      metronomoPrendido, volumenMetronomo, volumenCancion, reproduccionContinua,
+    }));
+  } catch {
+    // no es grave: solo no se recuerda
+  }
+}
+
+// El AudioContext se crea la primera vez que se toca play o el metrónomo:
+// los navegadores no dejan sonar audio sin que el usuario toque algo antes.
+let contextoAudio = null;
+let gananciaCancion = null;     // volumen de la canción
+let gananciaMetronomo = null;   // volumen del metrónomo
+
+function asegurarAudio() {
+  if (!contextoAudio) {
+    const Contexto = window.AudioContext || window.webkitAudioContext;
+    if (!Contexto) return null;
+    contextoAudio = new Contexto();
+    gananciaMetronomo = contextoAudio.createGain();
+    gananciaMetronomo.gain.value = volumenMetronomo;
+    gananciaMetronomo.connect(contextoAudio.destination);
+    // La canción (el <audio>) pasa a sonar a través del contexto.
+    try {
+      const fuente = contextoAudio.createMediaElementSource(audio);
+      gananciaCancion = contextoAudio.createGain();
+      fuente.connect(gananciaCancion).connect(contextoAudio.destination);
+    } catch {
+      gananciaCancion = null;   // si falla, el volumen se maneja con audio.volume
+    }
+    aplicarVolumenCancion();
+  }
+  if (contextoAudio.state === "suspended") contextoAudio.resume();
+  return contextoAudio;
+}
+
+function aplicarVolumenCancion() {
+  if (gananciaCancion) {
+    gananciaCancion.gain.value = volumenCancion;
+    audio.volume = 1;
+  } else {
+    audio.volume = volumenCancion;
+  }
+}
+
+function reproducirCancion() {
+  asegurarAudio();
+  audio.play().catch(() => {});
+}
+
+/* ------------------------------------------------------------------
+   Metrónomo
+
+   Cada 25 ms revisamos qué pulsos van a sonar en los próximos 0,2 s y
+   los "programamos" en el reloj del AudioContext, que es muy preciso.
+   Para saber CUÁNDO cae un pulso usamos la posición real del audio y la
+   velocidad:  momento = ahora + (pulso + ajuste - posición) / velocidad.
+   Si se adelanta, se pausa, cambia la velocidad o el ajuste, se cancelan
+   los clics ya programados y se vuelve a calcular desde la nueva posición.
+   ------------------------------------------------------------------ */
+
+const ADELANTO_METRONOMO = 0.2;      // segundos que se programan por adelantado
+const INTERVALO_METRONOMO = 25;      // ms entre revisiones
+let proximoPulsoMetronomo = null;    // índice del próximo pulso a programar
+let clicsProgramados = [];
+let temporizadorMetronomo = null;
+
+// Un clic corto: un tono que se apaga enseguida. Más agudo y fuerte en el
+// primer tiempo del compás.
+function sonarClic(cuando, primerTiempo) {
+  const oscilador = contextoAudio.createOscillator();
+  const envolvente = contextoAudio.createGain();
+  oscilador.frequency.value = primerTiempo ? 1760 : 1100;
+  envolvente.gain.setValueAtTime(0, cuando);
+  envolvente.gain.linearRampToValueAtTime(primerTiempo ? 1 : 0.5, cuando + 0.002);
+  envolvente.gain.exponentialRampToValueAtTime(0.001, cuando + 0.06);
+  oscilador.connect(envolvente).connect(gananciaMetronomo);
+  oscilador.start(cuando);
+  oscilador.stop(cuando + 0.07);
+  clicsProgramados.push(oscilador);
+  oscilador.onended = () => {
+    clicsProgramados = clicsProgramados.filter((o) => o !== oscilador);
+    envolvente.disconnect();
+  };
+}
+
+// Cancela los clics ya programados y hace que se recalcule desde la posición actual.
+function reiniciarMetronomo() {
+  proximoPulsoMetronomo = null;
+  for (const oscilador of clicsProgramados) {
+    try {
+      oscilador.stop();     // si todavía no empezó, ya no va a sonar
+    } catch {
+      // ya había terminado
+    }
+  }
+  clicsProgramados = [];
+}
+
+function programarMetronomo() {
+  if (!metronomoPrendido || audio.paused || audio.seeking || pulsos.length === 0) return;
+  if (!contextoAudio || contextoAudio.state !== "running") return;
+
+  const velocidad = audio.playbackRate;
+  const posicion = audio.currentTime;            // dónde está la canción ahora
+  const ahora = contextoAudio.currentTime;       // y qué hora marca el reloj del contexto
+
+  // La primera vez (o después de reiniciar): el primer pulso que todavía no sonó.
+  if (proximoPulsoMetronomo === null) {
+    proximoPulsoMetronomo = pulsos.findIndex((p) => p + ajuste >= posicion - 0.005);
+    if (proximoPulsoMetronomo < 0) proximoPulsoMetronomo = pulsos.length;
+  }
+
+  while (proximoPulsoMetronomo < pulsos.length) {
+    const i = proximoPulsoMetronomo;
+    const cuando = ahora + (pulsos[i] + ajuste - posicion) / velocidad;
+    if (cuando > ahora + ADELANTO_METRONOMO) break;      // todavía falta: lo programamos después
+    if (cuando >= ahora - 0.02) sonarClic(Math.max(cuando, ahora), esCompas[i]);
+    proximoPulsoMetronomo++;
+  }
+}
+
+function arrancarMetronomo() {
+  if (temporizadorMetronomo === null) {
+    temporizadorMetronomo = setInterval(programarMetronomo, INTERVALO_METRONOMO);
+  }
+  programarMetronomo();
+}
+
+function pararMetronomo() {
+  clearInterval(temporizadorMetronomo);
+  temporizadorMetronomo = null;
+  reiniciarMetronomo();
+}
+
+function mostrarMetronomo() {
+  botonMetronomo.setAttribute("aria-pressed", String(metronomoPrendido));
+}
+
+botonMetronomo.addEventListener("click", () => {
+  metronomoPrendido = !metronomoPrendido;
+  mostrarMetronomo();
+  guardarPreferencias();
+  if (metronomoPrendido) {
+    asegurarAudio();
+    reiniciarMetronomo();
+    if (!audio.paused) arrancarMetronomo();
+  } else {
+    pararMetronomo();
+  }
+});
+
+// Todo lo que cambia la relación entre la canción y el reloj obliga a recalcular.
+audio.addEventListener("seeking", reiniciarMetronomo);
+audio.addEventListener("ratechange", reiniciarMetronomo);
+
+/* ------------------------------------------------------------------
+   Velocidad (sin cambiar el tono)
+   ------------------------------------------------------------------ */
+
+function textoVelocidad(v) {
+  return "x" + String(v);
+}
+
+function aplicarVelocidad(v) {
+  // preservesPitch: el navegador estira el audio sin volverlo más agudo o grave.
+  audio.preservesPitch = true;
+  audio.defaultPlaybackRate = v;
+  audio.playbackRate = v;
+  for (const boton of botonesVelocidad) {
+    boton.setAttribute("aria-pressed", String(Number(boton.dataset.velocidad) === v));
+  }
+  resumenOpciones.textContent = textoVelocidad(v);
+}
+
+for (const boton of botonesVelocidad) {
+  boton.addEventListener("click", () => {
+    const v = Number(boton.dataset.velocidad);
+    aplicarVelocidad(v);
+    // Se recuerda por canción.
+    if (idActual !== null) actualizarCancion(idActual, { velocidad: v }).catch(() => {});
+  });
+}
+
+/* ------------------------------------------------------------------
+   Panel de opciones, volúmenes y reproducción continua
+   ------------------------------------------------------------------ */
+
+botonMas.addEventListener("click", () => panelOpciones.showModal());
+botonCerrarOpciones.addEventListener("click", () => panelOpciones.close());
+// Tocar afuera del panel (en la parte oscura) también lo cierra.
+panelOpciones.addEventListener("click", (evento) => {
+  if (evento.target === panelOpciones) panelOpciones.close();
+});
+
+volumenCancionControl.addEventListener("input", () => {
+  volumenCancion = Number(volumenCancionControl.value);
+  aplicarVolumenCancion();
+  guardarPreferencias();
+});
+
+volumenMetronomoControl.addEventListener("input", () => {
+  volumenMetronomo = Number(volumenMetronomoControl.value);
+  if (gananciaMetronomo) gananciaMetronomo.gain.value = volumenMetronomo;
+  guardarPreferencias();
+});
+
+reproduccionContinuaControl.addEventListener("change", () => {
+  reproduccionContinua = reproduccionContinuaControl.checked;
+  guardarPreferencias();
+  mostrarPosicionEnLista();   // "siguiente" puede habilitarse al final de la lista
+});
+
+// Volver al principio de la canción.
+botonInicio.addEventListener("click", () => {
+  audio.currentTime = 0;
+  actualizar();
+});
+
+// Muestra en los controles las preferencias guardadas.
+function mostrarPreferencias() {
+  volumenCancionControl.value = volumenCancion;
+  volumenMetronomoControl.value = volumenMetronomo;
+  reproduccionContinuaControl.checked = reproduccionContinua;
+  mostrarMetronomo();
+  aplicarVolumenCancion();
 }
 
 /* ==================================================================
@@ -901,7 +1286,9 @@ function actualizar() {
 
   // Cuenta regresiva hasta el próximo cambio (se actualiza siempre)
   const siguiente = acordes[indice + 1];
-  const cuenta = siguiente ? `en ${Math.max(0, siguiente.inicio - t).toFixed(1)} s` : "";
+  // Segundos reales hasta el cambio: a x0.5 la canción tarda el doble en llegar.
+  const faltan = siguiente ? Math.max(0, siguiente.inicio - t) / audio.playbackRate : 0;
+  const cuenta = siguiente ? `en ${faltan.toFixed(1)} s` : "";
   cuentaRegresiva.textContent = cuenta;
   cuentaDespues.textContent = cuenta || "Fin";
 
@@ -1190,7 +1577,7 @@ diagramaDespues.addEventListener("click", () => cambiarPosicion(acordes[indiceAc
    ================================================================== */
 
 botonPlay.addEventListener("click", () => {
-  if (audio.paused) audio.play();
+  if (audio.paused) reproducirCancion();
   else audio.pause();
 });
 
@@ -1199,11 +1586,13 @@ audio.addEventListener("play", () => {
   botonPlay.setAttribute("aria-label", "Pausar");
   pedirPantallaEncendida();
   requestAnimationFrame(bucle);
+  if (metronomoPrendido) arrancarMetronomo();
 });
 
 audio.addEventListener("pause", () => {
   botonPlay.textContent = "▶";
   botonPlay.setAttribute("aria-label", "Reproducir");
+  pararMetronomo();
   soltarPantalla();
   actualizar();
 });
@@ -1244,6 +1633,7 @@ function mostrarAjuste() {
 function cambiarAjuste(delta) {
   ajuste = Math.round((ajuste + delta) * 10) / 10;
   mostrarAjuste();
+  reiniciarMetronomo();   // el ajuste también corre los clics
   indiceActual = -1; // forzamos a redibujar aunque no cambie el acorde
   actualizar();
   // Lo guardamos en la biblioteca para que quede listo la próxima vez.
@@ -1288,4 +1678,5 @@ document.addEventListener("visibilitychange", () => {
    ================================================================== */
 
 aplicarVista(vista);
+mostrarPreferencias();
 mostrarBiblioteca();

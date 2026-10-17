@@ -240,15 +240,23 @@ function borrarLista(idLista) {
   });
 }
 
-/** Guarda el ajuste de sincronización de una canción. */
-function guardarAjuste(id, ajuste) {
+/**
+ * Cambia algunos datos de una canción sin tocar el resto.
+ * Por ejemplo: actualizarCancion(3, { velocidad: 0.75 }).
+ */
+function actualizarCancion(id, cambios) {
   return transaccion(["canciones"], "readwrite", (tx) => {
     const almacen = tx.objectStore("canciones");
     const pedido = almacen.get(id);
     pedido.addEventListener("success", () => {
-      if (pedido.result) almacen.put({ ...pedido.result, ajuste });
+      if (pedido.result) almacen.put({ ...pedido.result, ...cambios });
     });
   });
+}
+
+/** Guarda el ajuste de sincronización de una canción. */
+function guardarAjuste(id, ajuste) {
+  return actualizarCancion(id, { ajuste });
 }
 
 /**

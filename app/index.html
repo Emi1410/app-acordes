@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.7">
+  <link rel="stylesheet" href="style.css?v=1.8">
 </head>
 <body>
 
@@ -87,7 +87,11 @@
   <section id="pantalla-reproductor" class="pantalla-completa" hidden>
     <header class="encabezado">
       <button id="boton-volver" class="boton boton-volver" type="button" aria-label="Volver a la biblioteca">←</button>
-      <p id="titulo" class="titulo"></p>
+      <!-- Nombre de la canción y, abajo, desde qué lista se abrió: "Airbag · 3 de 12" -->
+      <div class="titulos">
+        <p id="titulo" class="titulo"></p>
+        <small id="posicion-lista" class="posicion-lista"></small>
+      </div>
       <button id="boton-agregar-lista" class="boton boton-chico" type="button">+ Lista</button>
       <button id="boton-reanalizar" class="boton boton-volver" type="button"
               aria-label="Volver a analizar la canción" title="Volver a analizar">↻</button>
@@ -147,7 +151,7 @@
     <!-- El <audio> no se ve: lo manejamos con nuestros propios controles grandes. -->
     <audio id="audio" preload="auto"></audio>
     <div class="reproductor">
-      <button id="boton-play" class="boton boton-play" type="button" aria-label="Reproducir">▶</button>
+      <!-- Barra de tiempo -->
       <div class="barra">
         <input type="range" id="barra-tiempo" min="0" max="0" step="0.1" value="0">
         <div class="tiempos">
@@ -155,9 +159,30 @@
           <span id="tiempo-total">0:00</span>
         </div>
       </div>
+
+      <!-- Controles principales. Los íconos son SVG (y no emojis) para que
+           se vean igual en todos los celulares. -->
+      <div class="transporte">
+        <button id="boton-inicio" class="boton boton-icono" type="button"
+                aria-label="Volver al principio" title="Volver al principio">0:00</button>
+        <button id="boton-anterior" class="boton boton-icono" type="button"
+                aria-label="Canción anterior" title="Canción anterior">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="2.5" height="14"/><path d="M19 5v14L8.5 12z"/></svg>
+        </button>
+        <button id="boton-play" class="boton boton-play" type="button" aria-label="Reproducir">▶</button>
+        <button id="boton-siguiente" class="boton boton-icono" type="button"
+                aria-label="Canción siguiente" title="Canción siguiente">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="16.5" y="5" width="2.5" height="14"/><path d="M5 5v14l10.5-7z"/></svg>
+        </button>
+        <!-- Metrónomo: prendido / apagado (aria-pressed) -->
+        <button id="boton-metronomo" class="boton boton-icono" type="button"
+                aria-label="Metrónomo" aria-pressed="false" title="Metrónomo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l4 18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 16 17 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.8"/></svg>
+        </button>
+      </div>
     </div>
 
-    <!-- Ajuste de sincronización (se guarda por canción) -->
+    <!-- Ajuste de sincronización (se guarda por canción) y botón del panel de opciones -->
     <div class="ajuste">
       <button id="boton-antes" class="boton" type="button">− 0.1 s</button>
       <div class="ajuste-valor">
@@ -165,6 +190,10 @@
         <small>ajuste</small>
       </div>
       <button id="boton-despues" class="boton" type="button">+ 0.1 s</button>
+      <button id="boton-mas" class="boton boton-mas" type="button" aria-label="Más opciones">
+        <span>Más</span>
+        <small id="resumen-opciones">x1</small>
+      </button>
     </div>
 
     <!-- Lista de todos los acordes -->
@@ -181,6 +210,50 @@
       <button id="boton-cancelar-analisis" class="boton" type="button">Cancelar</button>
     </div>
   </div>
+
+  <!-- ==============================================================
+       Panel "Más": opciones del reproductor que se usan menos
+       (sube desde abajo, sin apretar la pantalla principal)
+       ============================================================== -->
+  <dialog id="panel-opciones" class="dialogo hoja">
+    <div class="hoja-contenido">
+      <h2>Opciones</h2>
+
+      <section class="grupo-opciones">
+        <h3>Velocidad <small>(sin cambiar el tono)</small></h3>
+        <div id="velocidades" class="botonera" role="group" aria-label="Velocidad">
+          <button type="button" data-velocidad="0.5">x0.5</button>
+          <button type="button" data-velocidad="0.75">x0.75</button>
+          <button type="button" data-velocidad="1">x1</button>
+          <button type="button" data-velocidad="1.25">x1.25</button>
+          <button type="button" data-velocidad="1.5">x1.5</button>
+          <button type="button" data-velocidad="2">x2</button>
+        </div>
+      </section>
+
+      <section class="grupo-opciones">
+        <h3>Volumen</h3>
+        <label class="control-volumen">
+          <span>Canción</span>
+          <input type="range" id="volumen-cancion" min="0" max="1" step="0.05" value="1">
+        </label>
+        <label class="control-volumen">
+          <span>Metrónomo</span>
+          <input type="range" id="volumen-metronomo" min="0" max="1" step="0.05" value="0.7">
+        </label>
+      </section>
+
+      <section class="grupo-opciones">
+        <label class="interruptor">
+          <input type="checkbox" id="reproduccion-continua">
+          <span>Reproducción continua</span>
+        </label>
+        <p class="ayuda">Al terminar una canción empieza la siguiente. Al terminar la lista, sigue con la primera de la lista siguiente.</p>
+      </section>
+
+      <button id="boton-cerrar-opciones" class="boton boton-principal" type="button">Listo</button>
+    </div>
+  </dialog>
 
   <!-- ==============================================================
        Ventana "Agregar a lista" (desde el reproductor)
@@ -210,10 +283,10 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.7"></script>
-  <script src="diagrama.js?v=1.7"></script>
-  <script src="biblioteca.js?v=1.7"></script>
-  <script src="analizador.js?v=1.7"></script>
-  <script src="app.js?v=1.7"></script>
+  <script src="acordes.js?v=1.8"></script>
+  <script src="diagrama.js?v=1.8"></script>
+  <script src="biblioteca.js?v=1.8"></script>
+  <script src="analizador.js?v=1.8"></script>
+  <script src="app.js?v=1.8"></script>
 </body>
 </html>
