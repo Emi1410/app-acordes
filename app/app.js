@@ -20,6 +20,8 @@ const botonAntes = document.getElementById("boton-antes");
 const botonDespues = document.getElementById("boton-despues");
 const valorAjuste = document.getElementById("valor-ajuste");
 const lista = document.getElementById("lista");
+const diagramaActual = document.getElementById("diagrama-actual");
+const diagramaSiguiente = document.getElementById("diagrama-siguiente");
 
 /* ==================================================================
    Estado de la app
@@ -41,6 +43,16 @@ let arrastrando = false;
 
 // Bloqueo de pantalla: evita que el celular se apague mientras tocás.
 let bloqueoPantalla = null;
+
+// Posición elegida para cada acorde, por ejemplo { "G#": 1, "C#m": 0 }.
+// Se guarda en el navegador para que se acuerde aunque cierres la app.
+// El try/catch es porque algunos navegadores bloquean ese almacenamiento.
+let posicionElegida = {};
+try {
+  posicionElegida = JSON.parse(localStorage.getItem("posicionElegida")) || {};
+} catch {
+  posicionElegida = {};
+}
 
 /* ==================================================================
    Utilidades
@@ -87,9 +99,11 @@ inputJson.addEventListener("change", async () => {
       throw new Error("no tiene la lista 'acordes'");
     }
     acordes = datos.acordes;
-    titulo.textContent = datos.tempo
-      ? `${datos.cancion} · ${Math.round(datos.tempo)} BPM`
-      : datos.cancion || archivo.name;
+    // Título: nombre, tonalidad y tempo (los dos últimos solo si vienen en el JSON).
+    const partes = [datos.cancion || archivo.name];
+    if (datos.tonalidad) partes.push(datos.tonalidad);
+    if (datos.tempo) partes.push(`${Math.round(datos.tempo)} BPM`);
+    titulo.textContent = partes.join(" · ");
     nombreJson.textContent = archivo.name;
   } catch (error) {
     alert("No pude leer ese JSON: " + error.message);
@@ -175,6 +189,7 @@ function actualizar() {
 
   acordeActual.textContent = indice >= 0 ? nombreVisible(acordes[indice].acorde) : "–";
   acordeSiguiente.textContent = siguiente ? nombreVisible(siguiente.acorde) : "fin";
+  mostrarDiagramas();
 
   // Marcamos las fichas: las anteriores como "pasado" y la actual resaltada.
   lista.querySelectorAll("li").forEach((item, i) => {
@@ -194,6 +209,63 @@ function bucle() {
   actualizar();
   if (!audio.paused) requestAnimationFrame(bucle);
 }
+
+/* ==================================================================
+   Diagramas de posición (usa acordes.js y diagrama.js)
+   ================================================================== */
+
+// Devuelve la posición a dibujar para un acorde (la que el usuario eligió
+// la última vez, o la primera) junto con cuántas hay. null si no hay diagrama.
+function posicionParaDibujar(nombre) {
+  const posiciones = posicionesDeAcorde(nombre); // [] para "N" o desconocidos
+  if (posiciones.length === 0) return null;
+  const elegida = posicionElegida[nombreNormalizado(nombre)] || 0;
+  return {
+    posicion: posiciones[elegida % posiciones.length],
+    numero: (elegida % posiciones.length) + 1,
+    total: posiciones.length,
+  };
+}
+
+// Dibuja el diagrama grande (acorde actual) y el chico (siguiente acorde).
+function mostrarDiagramas() {
+  const actual = acordes[indiceActual];
+  const siguiente = acordes[indiceActual + 1];
+
+  // Diagrama grande + texto "1/3 · tocá para cambiar" debajo.
+  const grande = actual ? posicionParaDibujar(actual.acorde) : null;
+  diagramaActual.replaceChildren();
+  diagramaActual.hidden = !grande;
+  if (grande) {
+    diagramaActual.appendChild(dibujarDiagrama(grande.posicion));
+    if (grande.total > 1) {
+      diagramaActual.append(`${grande.numero}/${grande.total} · tocá para cambiar`);
+    }
+  }
+
+  // Diagrama chico del próximo acorde (vacío si es "N", desconocido o el final).
+  const chico = siguiente ? posicionParaDibujar(siguiente.acorde) : null;
+  diagramaSiguiente.replaceChildren();
+  if (chico) diagramaSiguiente.appendChild(dibujarDiagrama(chico.posicion));
+}
+
+// Al tocar el diagrama grande pasamos a la siguiente posición de ese acorde
+// (y después de la última, vuelve a la primera). La elección se recuerda.
+diagramaActual.addEventListener("click", () => {
+  const actual = acordes[indiceActual];
+  if (!actual) return;
+  const clave = nombreNormalizado(actual.acorde);
+  const total = posicionesDeAcorde(actual.acorde).length;
+  if (!clave || total < 2) return;
+
+  posicionElegida[clave] = ((posicionElegida[clave] || 0) + 1) % total;
+  try {
+    localStorage.setItem("posicionElegida", JSON.stringify(posicionElegida));
+  } catch {
+    // Si no se puede guardar, igual queda recordada mientras la app esté abierta.
+  }
+  mostrarDiagramas();
+});
 
 /* ==================================================================
    2. Reproductor

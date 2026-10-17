@@ -31,9 +31,59 @@ UMBRAL_SILENCIO = 0.10
 # consideran "ruido" y se absorben en el acorde vecino.
 MINIMO_PULSOS = 2
 
+# Tercera débil: si la tercera más fuerte (mayor o menor) tiene menos de este
+# porcentaje de la energía de la fundamental y la quinta, se considera que
+# casi no suena (típico de los power chords con distorsión).
+UMBRAL_TERCERA_DEBIL = 0.5
+
+# Tercera ambigua: si la tercera mayor y la menor tienen energías que se
+# diferencian en menos de este porcentaje, no se puede saber cuál es.
+MARGEN_TERCERA_AMBIGUA = 0.25
+
+# Séptima: solo se agrega si la nota de séptima tiene al menos este porcentaje
+# de la energía de la fundamental y la quinta del acorde. Con valores más
+# bajos (0.6) aparecían séptimas en casi todos los C#m y E de la canción de
+# prueba, porque esas notas también suenan en la melodía.
+UMBRAL_SEPTIMA = 0.8
+
+# Además, el tramo tiene que durar al menos esta cantidad de pulsos: en tramos
+# muy cortos el promedio se ensucia con el acorde anterior o el siguiente.
+MINIMO_PULSOS_SEPTIMA = 4
+
 # Nombres de las 12 notas en cifrado americano. El orden es el mismo que usa
 # librosa en el cromagrama: la fila 0 es C, la 1 es C#, etc.
 NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+
+# Los mismos nombres en español, solo para mostrar la tonalidad en la terminal.
+NOTAS_ESPANOL = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
+
+# Tipos de acorde: sufijo del nombre -> notas que lo forman, en semitonos
+# desde la fundamental. Por ejemplo, para C: C=0, E=4, G=7, Bb=10.
+#   ""   mayor              (C)   = fundamental + tercera mayor + quinta
+#   "m"  menor              (Cm)  = fundamental + tercera menor + quinta
+#   "7"  séptima dominante  (C7)  = mayor + séptima menor
+#   "m7" menor séptima      (Cm7) = menor + séptima menor
+INTERVALOS = {
+    "": (0, 4, 7),
+    "m": (0, 3, 7),
+    "7": (0, 4, 7, 10),
+    "m7": (0, 3, 7, 10),
+}
+
+# Versión con séptima de cada tipo básico.
+CON_SEPTIMA = {"": "7", "m": "m7"}
+
+# Perfiles de tonalidad de Krumhansl-Kessler: cuánto "pertenece" cada una de
+# las 12 notas a una tonalidad mayor o menor que empieza en C. Salen de
+# experimentos con oyentes y son el método clásico para estimar la tonalidad.
+PERFIL_MAYOR = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+PERFIL_MENOR = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+# Acordes que pertenecen a cada tipo de tonalidad, como (semitonos desde la
+# tónica, tipo). En menor se incluye el V mayor (por ejemplo G# en C#m),
+# que es muy común aunque no esté en la escala menor natural.
+ACORDES_MAYOR = {(0, ""), (2, "m"), (4, "m"), (5, ""), (7, ""), (9, "m")}
+ACORDES_MENOR = {(0, "m"), (3, ""), (5, "m"), (7, "m"), (7, ""), (8, ""), (10, "")}
 
 # Carpeta raíz del proyecto (la que contiene analizador/, canciones/ y resultados/).
 RAIZ_PROYECTO = Path(__file__).resolve().parent.parent
@@ -68,22 +118,26 @@ def detectar_pulsos(y_percusiva, sr):
 
 
 # ---------------------------------------------------------------------------
-# 3. Cromagrama promediado por pulso
+# 3. Cromagrama
 # ---------------------------------------------------------------------------
 
-def cromagrama_por_pulso(y_armonica, sr, frames_pulsos):
+def calcular_cromagrama(y_armonica, sr):
     """
     Calcula el cromagrama: para cada frame, cuánta energía tiene cada una de
     las 12 notas (sin importar la octava). Es una matriz de 12 filas x N frames.
-
-    Después lo promedia entre pulso y pulso, así nos queda un solo "perfil de
-    12 notas" por cada pulso, que es mucho más estable que frame a frame.
-    También devuelve el volumen (RMS) promedio de cada pulso para detectar silencios.
+    Usamos la parte armónica (sin batería) para que los golpes no ensucien las notas.
+    También devuelve el volumen (RMS) de cada frame, para detectar silencios.
     """
-    # Usamos la parte armónica (sin batería) para que los golpes no ensucien las notas.
     croma = librosa.feature.chroma_cqt(y=y_armonica, sr=sr)
     rms = librosa.feature.rms(y=y_armonica)
+    return croma, rms
 
+
+def promediar_por_pulso(croma, rms, sr, frames_pulsos):
+    """
+    Promedia el cromagrama entre pulso y pulso, así nos queda un solo "perfil
+    de 12 notas" por cada pulso, que es mucho más estable que frame a frame.
+    """
     # Agregamos un límite al principio (frame 0) y al final, para que el
     # primer tramo arranque en 0:00 y el último llegue hasta el final.
     limites = librosa.util.fix_frames(frames_pulsos, x_min=0, x_max=croma.shape[1])
@@ -98,67 +152,137 @@ def cromagrama_por_pulso(y_armonica, sr, frames_pulsos):
 
 
 # ---------------------------------------------------------------------------
-# 4. Comparación con plantillas de acordes
+# 4. Tonalidad de la canción
 # ---------------------------------------------------------------------------
 
-def crear_plantillas():
+def estimar_tonalidad(croma):
     """
-    Arma las 24 plantillas: 12 acordes mayores y 12 menores.
+    Estima la tonalidad comparando el perfil de notas de TODA la canción con
+    los 24 perfiles de tonalidad (12 mayores y 12 menores).
 
-    Cada plantilla es un vector de 12 posiciones con un 1 en las notas del
-    acorde y 0 en el resto. Por ejemplo, C mayor = C, E, G:
+    Para probar cada tónica "giramos" el perfil: np.roll(PERFIL_MAYOR, 2) es el
+    perfil de D mayor. La comparación es una correlación: vale 1 si los dos
+    perfiles suben y bajan igual. Devuelve (tónica, modo), con modo "" o "m".
+    """
+    perfil_cancion = croma.mean(axis=1)
+    mejor, mejor_correlacion = None, -np.inf
+    for tonica in range(12):
+        for modo, perfil in (("", PERFIL_MAYOR), ("m", PERFIL_MENOR)):
+            correlacion = np.corrcoef(perfil_cancion, np.roll(perfil, tonica))[0, 1]
+            if correlacion > mejor_correlacion:
+                mejor, mejor_correlacion = (tonica, modo), correlacion
+    return mejor
+
+
+def nombre_tonalidad(tonalidad):
+    """(1, "m") -> "C#m"."""
+    tonica, modo = tonalidad
+    return NOTAS[tonica] + modo
+
+
+def nombre_tonalidad_espanol(tonalidad):
+    """(1, "m") -> "Do# menor"."""
+    tonica, modo = tonalidad
+    return f"{NOTAS_ESPANOL[tonica]} {'menor' if modo == 'm' else 'mayor'}"
+
+
+def pertenece_a_tonalidad(raiz, tipo, tonalidad):
+    """¿El acorde (raiz, tipo) es uno de los acordes propios de la tonalidad?"""
+    tonica, modo = tonalidad
+    acordes_propios = ACORDES_MENOR if modo == "m" else ACORDES_MAYOR
+    return ((raiz - tonica) % 12, tipo) in acordes_propios
+
+
+# ---------------------------------------------------------------------------
+# 5. Elección de acordes con plantillas
+# ---------------------------------------------------------------------------
+
+def plantilla(raiz, tipo):
+    """
+    Arma la plantilla de un acorde: un vector de 12 posiciones con un 1 en las
+    notas del acorde y 0 en el resto, normalizado a largo 1. Por ejemplo C:
         C  C# D  D# E  F  F# G  G# A  A# B
         1  0  0  0  1  0  0  1  0  0  0  0
-    Mayor = fundamental + 4 semitonos + 7 semitonos.
-    Menor = fundamental + 3 semitonos + 7 semitonos.
     """
-    nombres = []
-    plantillas = []
-    for i, nota in enumerate(NOTAS):
-        for sufijo, intervalos in (("", (0, 4, 7)), ("m", (0, 3, 7))):
-            vector = np.zeros(12)
-            for intervalo in intervalos:
-                vector[(i + intervalo) % 12] = 1
-            nombres.append(nota + sufijo)
-            plantillas.append(vector)
-
-    plantillas = np.array(plantillas)
-    # Normalizamos cada plantilla para que tenga largo 1 (necesario para la
-    # similitud coseno de más abajo).
-    plantillas /= np.linalg.norm(plantillas, axis=1, keepdims=True)
-    return nombres, plantillas
+    vector = np.zeros(12)
+    for intervalo in INTERVALOS[tipo]:
+        vector[(raiz + intervalo) % 12] = 1
+    return vector / np.linalg.norm(vector)
 
 
-def elegir_acordes(croma_pulsos, rms_pulsos):
+def normalizar(perfiles):
+    """Lleva cada columna a largo 1 (el 1e-9 evita dividir por cero en silencios)."""
+    return perfiles / (np.linalg.norm(perfiles, axis=0, keepdims=True) + 1e-9)
+
+
+def energia_base(perfil, raiz):
+    """Energía promedio de la fundamental y la quinta: la "referencia" del acorde."""
+    return (perfil[raiz] + perfil[(raiz + 7) % 12]) / 2
+
+
+def corregir_tercera(perfil, raiz, tipo, tonalidad):
     """
-    Para cada pulso, compara su perfil de 12 notas con las 24 plantillas y se
-    queda con la más parecida. Devuelve una lista de nombres de acordes.
+    Si la tercera es débil o ambigua, elige entre mayor y menor según la tonalidad.
+
+    Con distorsión los guitarristas suelen tocar power chords (fundamental y
+    quinta, sin tercera), así que el cromagrama no dice si es mayor o menor.
+    En ese caso nos quedamos con la versión que pertenece a la tonalidad.
+    Si las dos versiones pertenecen (o ninguna), se deja lo que se detectó.
+    """
+    tercera_mayor = perfil[(raiz + 4) % 12]
+    tercera_menor = perfil[(raiz + 3) % 12]
+    mas_fuerte = max(tercera_mayor, tercera_menor)
+
+    debil = mas_fuerte < UMBRAL_TERCERA_DEBIL * energia_base(perfil, raiz)
+    ambigua = abs(tercera_mayor - tercera_menor) < MARGEN_TERCERA_AMBIGUA * mas_fuerte
+    if not (debil or ambigua):
+        return tipo
+
+    mayor_en_tono = pertenece_a_tonalidad(raiz, "", tonalidad)
+    menor_en_tono = pertenece_a_tonalidad(raiz, "m", tonalidad)
+    if mayor_en_tono and not menor_en_tono:
+        return ""
+    if menor_en_tono and not mayor_en_tono:
+        return "m"
+    return tipo
+
+
+def elegir_acordes(croma_pulsos, rms_pulsos, tonalidad):
+    """
+    Para cada pulso, compara su perfil de 12 notas con las 24 plantillas de
+    acordes mayores y menores y se queda con la más parecida. Después corrige
+    la tercera con la tonalidad. Devuelve una lista de (raiz, tipo) o None
+    para los pulsos en silencio.
 
     La comparación es una "similitud coseno": mide qué tan parecida es la
     forma de los dos vectores, sin importar el volumen. Vale 1 si son iguales.
+    Las séptimas se deciden más adelante, por tramo (ver agregar_septimas).
     """
-    nombres, plantillas = crear_plantillas()
-
-    # Normalizamos cada perfil (cada columna) a largo 1. El 1e-9 evita dividir por cero.
-    perfiles = croma_pulsos / (np.linalg.norm(croma_pulsos, axis=0, keepdims=True) + 1e-9)
+    candidatos = [(raiz, tipo) for raiz in range(12) for tipo in ("", "m")]
+    plantillas = np.array([plantilla(raiz, tipo) for raiz, tipo in candidatos])
 
     # Multiplicar matrices calcula todas las similitudes de una vez:
     # (24 plantillas x 12 notas) @ (12 notas x N pulsos) = 24 x N similitudes.
-    similitudes = plantillas @ perfiles
+    similitudes = plantillas @ normalizar(croma_pulsos)
     mejores = np.argmax(similitudes, axis=0)
-    acordes = [nombres[i] for i in mejores]
 
     # Detección de silencio: comparamos el volumen de cada pulso con la mediana
     # de toda la canción (la mediana representa el volumen "típico").
     volumen_tipico = np.median(rms_pulsos)
-    for i, volumen in enumerate(rms_pulsos):
-        if volumen < UMBRAL_SILENCIO * volumen_tipico:
-            acordes[i] = "N"
+
+    acordes = []
+    for i, indice in enumerate(mejores):
+        if rms_pulsos[i] < UMBRAL_SILENCIO * volumen_tipico:
+            acordes.append(None)
+            continue
+        raiz, tipo = candidatos[indice]
+        tipo = corregir_tercera(croma_pulsos[:, i], raiz, tipo, tonalidad)
+        acordes.append((raiz, tipo))
     return acordes
 
 
 # ---------------------------------------------------------------------------
-# 5. Suavizado y unión en tramos
+# 6. Suavizado y unión en tramos
 # ---------------------------------------------------------------------------
 
 def agrupar(acordes):
@@ -201,23 +325,60 @@ def suavizar(acordes):
             acordes[i] = vecino[0]
 
 
-def armar_tramos(acordes, tiempos):
+def agregar_septimas(tramos, croma_pulsos):
     """
-    Convierte la lista de acordes por pulso en tramos con inicio y fin en segundos.
-    tiempos[i] es cuándo empieza el pulso i, y tiempos[i + 1] cuándo termina.
+    Decide para cada tramo (no para cada pulso) si el acorde lleva séptima.
+
+    Hacerlo por tramo evita que aparezcan séptimas sueltas: se promedia el
+    perfil de todos los pulsos del tramo y se exigen dos cosas:
+      1. Que la plantilla con séptima (por ejemplo B7) se parezca más al
+         perfil que la plantilla sin séptima (B).
+      2. Que la nota de séptima tenga una energía claramente alta: al menos
+         UMBRAL_SEPTIMA de la energía de la fundamental y la quinta. Esto
+         descarta los casos en que la séptima es solo una nota de la melodía.
+      3. Que el tramo dure al menos MINIMO_PULSOS_SEPTIMA pulsos.
+    Devuelve los tramos como [nombre, primer_pulso, cantidad_de_pulsos].
     """
     resultado = []
-    for acorde, inicio, largo in agrupar(acordes):
-        resultado.append({
-            "inicio": round(float(tiempos[inicio]), 2),
-            "fin": round(float(tiempos[inicio + largo]), 2),
-            "acorde": acorde,
-        })
+    for acorde, inicio, largo in tramos:
+        if acorde is None:
+            resultado.append(["N", inicio, largo])
+            continue
+
+        raiz, tipo = acorde
+        perfil = croma_pulsos[:, inicio:inicio + largo].mean(axis=1)
+        perfil_normalizado = perfil / (np.linalg.norm(perfil) + 1e-9)
+
+        tipo_septima = CON_SEPTIMA[tipo]
+        parecido_triada = plantilla(raiz, tipo) @ perfil_normalizado
+        parecido_septima = plantilla(raiz, tipo_septima) @ perfil_normalizado
+        septima = perfil[(raiz + 10) % 12]
+
+        if (largo >= MINIMO_PULSOS_SEPTIMA
+                and parecido_septima > parecido_triada
+                and septima >= UMBRAL_SEPTIMA * energia_base(perfil, raiz)):
+            tipo = tipo_septima
+        resultado.append([NOTAS[raiz] + tipo, inicio, largo])
     return resultado
 
 
+def armar_tramos(tramos, tiempos):
+    """
+    Convierte los tramos de pulsos en tramos con inicio y fin en segundos.
+    tiempos[i] es cuándo empieza el pulso i, y tiempos[i + 1] cuándo termina.
+    """
+    return [
+        {
+            "inicio": round(float(tiempos[inicio]), 2),
+            "fin": round(float(tiempos[inicio + largo]), 2),
+            "acorde": nombre,
+        }
+        for nombre, inicio, largo in tramos
+    ]
+
+
 # ---------------------------------------------------------------------------
-# 6 y 7. Guardar el JSON y mostrar en la terminal
+# 7. Guardar el JSON y mostrar en la terminal
 # ---------------------------------------------------------------------------
 
 def formato_minutos(segundos):
@@ -226,7 +387,7 @@ def formato_minutos(segundos):
     return f"{segundos // 60}:{segundos % 60:02d}"
 
 
-def guardar_json(nombre, tempo, tramos):
+def guardar_json(nombre, tempo, tonalidad, tramos):
     """Guarda el resultado en resultados/<nombre>.json y devuelve la ruta."""
     carpeta = RAIZ_PROYECTO / "resultados"
     carpeta.mkdir(exist_ok=True)
@@ -234,6 +395,7 @@ def guardar_json(nombre, tempo, tramos):
     datos = {
         "cancion": nombre,
         "tempo": round(tempo, 1),
+        "tonalidad": nombre_tonalidad(tonalidad),
         "acordes": tramos,
     }
     # ensure_ascii=False mantiene los acentos y las eñes tal cual.
@@ -264,14 +426,19 @@ def main():
     tempo, frames_pulsos = detectar_pulsos(y_percusiva, sr)
 
     print("Analizando acordes...")
-    croma_pulsos, rms_pulsos, tiempos = cromagrama_por_pulso(y_armonica, sr, frames_pulsos)
-    acordes = elegir_acordes(croma_pulsos, rms_pulsos)
+    croma, rms = calcular_cromagrama(y_armonica, sr)
+    tonalidad = estimar_tonalidad(croma)
+    croma_pulsos, rms_pulsos, tiempos = promediar_por_pulso(croma, rms, sr, frames_pulsos)
+
+    acordes = elegir_acordes(croma_pulsos, rms_pulsos, tonalidad)
     acordes = suavizar(acordes)
-    tramos = armar_tramos(acordes, tiempos)
+    tramos = agregar_septimas(agrupar(acordes), croma_pulsos)
+    tramos = armar_tramos(tramos, tiempos)
 
-    ruta_json = guardar_json(nombre, tempo, tramos)
+    ruta_json = guardar_json(nombre, tempo, tonalidad, tramos)
 
-    print(f"\nTempo: {tempo:.1f} BPM  |  {len(tramos)} tramos de acordes\n")
+    print(f"\nTempo: {tempo:.1f} BPM  |  Tonalidad: {nombre_tonalidad(tonalidad)} "
+          f"({nombre_tonalidad_espanol(tonalidad)})  |  {len(tramos)} tramos de acordes\n")
     for tramo in tramos:
         print(f"{formato_minutos(tramo['inicio']):>5}  {tramo['acorde']}")
     print(f"\nGuardado en {ruta_json}")

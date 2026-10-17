@@ -30,9 +30,18 @@
   <section class="pantalla">
     <p id="titulo" class="titulo">Elegí el mp3 y su JSON</p>
     <div id="acorde-actual" class="acorde-actual">–</div>
+
+    <!-- Diagrama del acorde actual. Es un botón: al tocarlo cambia de posición. -->
+    <button id="diagrama-actual" class="diagrama-actual" type="button"
+            aria-label="Cambiar la posición del acorde" hidden></button>
+
     <div class="siguiente">
-      Sigue: <strong id="acorde-siguiente">–</strong>
-      <span id="cuenta-regresiva"></span>
+      <div>
+        Sigue: <strong id="acorde-siguiente">–</strong>
+        <div id="cuenta-regresiva"></div>
+      </div>
+      <!-- Diagrama chico del próximo acorde -->
+      <div id="diagrama-siguiente" class="diagrama-siguiente"></div>
     </div>
   </section>
 
@@ -63,6 +72,11 @@
   <!-- 4. Lista de todos los acordes -->
   <ul id="lista" class="lista"></ul>
 
+  <!-- El orden importa: app.js usa funciones de los otros dos archivos.
+       Son scripts comunes (no módulos) para que funcionen abriendo el
+       archivo directo desde la compu, sin servidor. -->
+  <script src="acordes.js"></script>
+  <script src="diagrama.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

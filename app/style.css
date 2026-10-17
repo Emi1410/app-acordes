@@ -106,14 +106,19 @@ body {
 }
 
 .acorde-actual {
-  /* Tamaño que se adapta al ancho del celular, con mínimo y máximo */
-  font-size: clamp(5rem, 30vw, 10rem);
+  /* Tamaño que se adapta al ancho del celular, con mínimo y máximo.
+     Es un poco más chico que antes para dejar lugar al diagrama. */
+  font-size: clamp(4rem, 22vw, 7.5rem);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1;
   color: var(--acento);
 }
 
 .siguiente {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
   font-size: 1.6rem;
   color: var(--texto-suave);
 }
@@ -125,6 +130,82 @@ body {
 #cuenta-regresiva {
   font-size: 1.1rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------
+   Diagramas de acordes (el SVG lo arma diagrama.js)
+   ------------------------------------------------------------------ */
+
+/* Botón que contiene el diagrama grande: sin fondo, solo el dibujo. */
+.diagrama-actual {
+  display: block;
+  margin: 4px auto 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.diagrama-actual[hidden] {
+  display: none;
+}
+
+.diagrama-actual .diagrama {
+  display: block;
+  width: 118px;
+  height: auto;
+}
+
+.diagrama-siguiente .diagrama {
+  display: block;
+  width: 58px;
+  height: auto;
+}
+
+.diagrama .cuerda,
+.diagrama .traste {
+  stroke: var(--texto-suave);
+  stroke-width: 1;
+}
+
+/* Cejuela: la línea gruesa de arriba cuando el diagrama empieza en el traste 1 */
+.diagrama .cejuela {
+  stroke: var(--texto);
+  stroke-width: 4;
+}
+
+/* X (no se toca) y círculo (al aire) */
+.diagrama .marca {
+  fill: none;
+  stroke: var(--texto);
+  stroke-width: 1.5;
+}
+
+.diagrama .punto {
+  fill: var(--texto);
+}
+
+/* En el diagrama grande los dedos van en amarillo, como el acorde. */
+.diagrama-actual .diagrama .punto {
+  fill: var(--acento);
+}
+
+.diagrama .dedo {
+  fill: var(--fondo);
+  font-size: 9px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.diagrama .numero-traste {
+  fill: var(--texto-suave);
+  font-size: 11px;
+  text-anchor: end;
+  dominant-baseline: central;
 }
 
 /* ------------------------------------------------------------------

@@ -1,6 +1,7 @@
 {
   "cancion": "Prueba",
   "tempo": 117.5,
+  "tonalidad": "C#m",
   "acordes": [
     {
       "inicio": 0.0,
@@ -9,13 +10,13 @@
     },
     {
       "inicio": 0.67,
-      "fin": 4.71,
+      "fin": 3.2,
       "acorde": "E"
     },
     {
-      "inicio": 4.71,
+      "inicio": 3.2,
       "fin": 11.19,
-      "acorde": "C#"
+      "acorde": "C#m"
     },
     {
       "inicio": 11.19,
@@ -334,11 +335,11 @@
     },
     {
       "inicio": 159.2,
-      "fin": 161.7,
+      "fin": 160.71,
       "acorde": "G#"
     },
     {
-      "inicio": 161.7,
+      "inicio": 160.71,
       "fin": 163.21,
       "acorde": "C#m"
     },
@@ -385,7 +386,7 @@
     {
       "inicio": 182.21,
       "fin": 184.16,
-      "acorde": "B"
+      "acorde": "B7"
     },
     {
       "inicio": 184.16,
@@ -484,16 +485,6 @@
     },
     {
       "inicio": 227.18,
-      "fin": 237.31,
-      "acorde": "C#m"
-    },
-    {
-      "inicio": 237.31,
-      "fin": 238.91,
-      "acorde": "C#"
-    },
-    {
-      "inicio": 238.91,
       "fin": 245.04,
       "acorde": "C#m"
     }
