@@ -161,10 +161,6 @@ function detalleCancion(cancion) {
   return partes.join(" · ");
 }
 
-// El analizador usa "N" para "sin acorde"; en pantalla mostramos una raya.
-function nombreVisible(acorde) {
-  return acorde === "N" ? "–" : acorde;
-}
 
 /* ==================================================================
    Navegación entre pantallas
@@ -754,6 +750,12 @@ async function cargarCancion(id) {
   idActual = id;
   acordes = cancion.acordes;
   ajuste = cancion.ajuste || 0;
+  // Transporte, cejilla y afinación guardados para esta canción.
+  transporte = Number.isInteger(cancion.transporte) ? cancion.transporte : 0;
+  cejilla = Number.isInteger(cancion.cejilla) ? cancion.cejilla : 0;
+  afinacion = Number.isInteger(cancion.afinacion) ? cancion.afinacion : 0;
+  tonalidadOriginal = leerTonalidad(cancion.tonalidad);
+  cancionActual = cancion;
   indiceActual = -1;
 
   // Creamos una URL temporal que apunta al mp3 guardado y se la damos al reproductor.
@@ -763,8 +765,8 @@ async function cargarCancion(id) {
   // el src, porque al cargar un audio nuevo el navegador la vuelve a x1.
   aplicarVelocidad(cancion.velocidad || 1);
 
-  const detalle = detalleCancion(cancion);
-  titulo.textContent = detalle ? `${cancion.nombre} · ${detalle}` : cancion.nombre;
+  mostrarTitulo();
+  mostrarOpcionesAcordes();
   tiempoTotal.textContent = "0:00";
   barraTiempo.value = 0;
   acordeActual.textContent = "–";
@@ -1230,7 +1232,7 @@ function dibujarLista() {
     const item = document.createElement("li");
     item.dataset.indice = i;
     const nombre = document.createElement("b");
-    nombre.textContent = nombreVisible(tramo.acorde);
+    nombre.textContent = nombreParaMostrar(tramo.acorde);
     const tiempo = document.createElement("small");
     tiempo.textContent = formatoTiempo(tramo.inicio);
     item.append(nombre, tiempo);
@@ -1300,8 +1302,8 @@ function actualizar() {
   if (indice === indiceActual) return;
   indiceActual = indice;
 
-  acordeActual.textContent = indice >= 0 ? nombreVisible(acordes[indice].acorde) : "–";
-  acordeSiguiente.textContent = siguiente ? nombreVisible(siguiente.acorde) : "fin";
+  acordeActual.textContent = indice >= 0 ? nombreParaMostrar(acordes[indice].acorde) : "–";
+  acordeSiguiente.textContent = siguiente ? nombreParaMostrar(siguiente.acorde) : "fin";
   mostrarDiagramas();
 
   // Marcamos las fichas: las anteriores como "pasado" y la actual resaltada.
@@ -1419,7 +1421,7 @@ function dibujarTira() {
     if (esCompas[i]) celda.classList.add("compas");
     const acorde = acordePorPulso[i];
     if (i === 0 || acorde !== acordePorPulso[i - 1]) {
-      celda.textContent = nombreVisible(acorde);
+      celda.textContent = nombreParaMostrar(acorde);
       celda.classList.add("cambio");
     }
     tira.appendChild(celda);
@@ -1494,12 +1496,145 @@ function bucle() {
    Diagramas de posición (usa acordes.js y diagrama.js)
    ================================================================== */
 
-// Devuelve la posición a dibujar para un acorde (la que el usuario eligió
-// la última vez, o la primera) junto con cuántas hay. null si no hay diagrama.
-function posicionParaDibujar(nombre) {
-  const posiciones = posicionesDeAcorde(nombre); // [] para "N" o desconocidos
+/* ==================================================================
+   Transportar, cejilla y afinación
+
+   Cambian solo los acordes que se MUESTRAN, no el sonido:
+     - transporte: sube o baja el acorde que suena (de -6 a +6 semitonos).
+     - cejilla (capo) y afinación: cambian la FORMA que se hace con la mano.
+       La cejilla sube todo el diapasón y afinar más bajo lo baja, así que
+         forma = acorde que suena - cejilla - afinación
+       Con cejilla 4, un E se toca con forma de C (E - 4 = C).
+       Con la guitarra en Eb (afinación -1), un C#m se toca como Dm.
+   Los acordes guardados siempre están en el tono real de la canción.
+   ================================================================== */
+
+let transporte = 0;          // semitonos, de -6 a +6
+let cejilla = 0;             // traste del capo, de 0 a 9
+let afinacion = 0;           // 0 estándar, -1 medio tono abajo (Eb), -2 un tono abajo (D)
+let tonalidadOriginal = null;   // { tonica, modo } de la canción, si se conoce
+
+// Cuántos semitonos hay que mover un acorde original para obtener la forma que se toca.
+function desplazamientoForma() {
+  return transporte - cejilla - afinacion;
+}
+
+// Tonalidad que suena (con el transporte aplicado).
+function tonalidadQueSuena() {
+  return moverTonalidad(tonalidadOriginal, transporte);
+}
+
+// Forma que se toca para un acorde original, escrita con sostenidos o
+// bemoles según la tonalidad de las formas (por ejemplo, Bb y no A# en F).
+function formaDe(acordeOriginal) {
+  const d = desplazamientoForma();
+  return transportarAcorde(acordeOriginal, d, moverTonalidad(tonalidadOriginal, d));
+}
+
+// Lo que se muestra en pantalla para un acorde original ("N" se ve como una raya).
+function nombreParaMostrar(acordeOriginal) {
+  return acordeOriginal === "N" ? "–" : formaDe(acordeOriginal);
+}
+
+// Datos de la canción abierta (para el título).
+let cancionActual = null;
+
+const indicadorAcordes = document.getElementById("indicador-acordes");
+const valorTransporte = document.getElementById("valor-transporte");
+const valorCejilla = document.getElementById("valor-cejilla");
+const transporteMenos = document.getElementById("transporte-menos");
+const transporteMas = document.getElementById("transporte-mas");
+const transporteCero = document.getElementById("transporte-cero");
+const cejillaMenos = document.getElementById("cejilla-menos");
+const cejillaMas = document.getElementById("cejilla-mas");
+const botonesAfinacion = [...document.querySelectorAll("#afinaciones button")];
+
+const NOMBRES_AFINACION = { "-1": "Afinación Eb", "-2": "Afinación D" };
+
+// "+2", "−3" o "0".
+const conSigno = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : "0");
+
+// Título: nombre · tonalidad QUE SUENA (transportada) · BPM.
+function mostrarTitulo() {
+  if (!cancionActual) return;
+  const partes = [cancionActual.nombre];
+  const tonalidad = tonalidadQueSuena();
+  if (tonalidad) partes.push(nombreDeTonalidad(tonalidad));
+  else if (cancionActual.tonalidad) partes.push(cancionActual.tonalidad);
+  if (cancionActual.tempo) partes.push(`${Math.round(cancionActual.tempo)} BPM`);
+  titulo.textContent = partes.join(" · ");
+}
+
+// Actualiza los controles del panel y el aviso de la pantalla principal.
+function mostrarOpcionesAcordes() {
+  valorTransporte.textContent = conSigno(transporte);
+  valorCejilla.textContent = cejilla ? String(cejilla) : "No";
+  transporteMenos.disabled = transporte <= -6;
+  transporteMas.disabled = transporte >= 6;
+  transporteCero.disabled = transporte === 0;
+  cejillaMenos.disabled = cejilla <= 0;
+  cejillaMas.disabled = cejilla >= 9;
+  for (const boton of botonesAfinacion) {
+    boton.setAttribute("aria-pressed", String(Number(boton.dataset.afinacion) === afinacion));
+  }
+
+  // Aviso arriba de la tira: qué está activo y en qué tonalidad quedan las formas.
+  const partes = [];
+  if (transporte) partes.push(`Tono ${conSigno(transporte)}`);
+  if (cejilla) partes.push(`Cejilla ${cejilla}`);
+  if (afinacion) partes.push(NOMBRES_AFINACION[afinacion]);
+  if ((cejilla || afinacion) && tonalidadOriginal) {
+    partes.push(`formas de ${nombreDeTonalidad(moverTonalidad(tonalidadOriginal, desplazamientoForma()))}`);
+  }
+  indicadorAcordes.textContent = partes.join(" · ");
+  indicadorAcordes.hidden = partes.length === 0;
+}
+
+// Después de cambiar algo: lo guardamos para esta canción y redibujamos
+// todos los nombres y diagramas.
+function cambiarOpcionesAcordes() {
+  mostrarOpcionesAcordes();
+  mostrarTitulo();
+  if (idActual === null) return;
+  actualizarCancion(idActual, { transporte, cejilla, afinacion }).catch(() => {});
+
+  const desplazamiento = tira.scrollLeft;   // que la tira no salte al principio
+  dibujarTira();
+  tira.scrollLeft = desplazamiento;
+  dibujarLista();
+  indiceActual = -1;
+  indicePulso = -1;
+  actualizar();
+  mostrarDiagramas();
+}
+
+transporteMenos.addEventListener("click", () => { transporte = Math.max(-6, transporte - 1); cambiarOpcionesAcordes(); });
+transporteMas.addEventListener("click", () => { transporte = Math.min(6, transporte + 1); cambiarOpcionesAcordes(); });
+transporteCero.addEventListener("click", () => { transporte = 0; cambiarOpcionesAcordes(); });
+cejillaMenos.addEventListener("click", () => { cejilla = Math.max(0, cejilla - 1); cambiarOpcionesAcordes(); });
+cejillaMas.addEventListener("click", () => { cejilla = Math.min(9, cejilla + 1); cambiarOpcionesAcordes(); });
+for (const boton of botonesAfinacion) {
+  boton.addEventListener("click", () => { afinacion = Number(boton.dataset.afinacion); cambiarOpcionesAcordes(); });
+}
+
+// Clave con la que se recuerda la posición elegida de una forma. Con cejilla
+// o afinación distinta de la estándar se recuerda aparte: así, aunque sin
+// cejilla hayas elegido la versión con cejilla de un acorde, con el capo
+// puesto se empieza por la posición abierta (la primera de la biblioteca).
+function clavePosicion(forma) {
+  const clave = nombreNormalizado(forma);
+  if (!clave) return null;
+  return cejilla || afinacion ? `capo:${clave}` : clave;
+}
+
+// Devuelve la posición a dibujar para un acorde ORIGINAL (se convierte a la
+// forma que se toca con transporte, cejilla y afinación), junto con cuántas
+// hay. null si no hay diagrama.
+function posicionParaDibujar(acordeOriginal) {
+  const forma = formaDe(acordeOriginal);
+  const posiciones = posicionesDeAcorde(forma); // [] para "N" o desconocidos
   if (posiciones.length === 0) return null;
-  const elegida = posicionElegida[nombreNormalizado(nombre)] || 0;
+  const elegida = posicionElegida[clavePosicion(forma)] || 0;
   return {
     posicion: posiciones[elegida % posiciones.length],
     numero: (elegida % posiciones.length) + 1,
@@ -1547,7 +1682,7 @@ function dibujarDiagramaPar(boton, etiqueta, acorde) {
     }
   }
   boton.disabled = !elegida || elegida.total < 2;
-  etiqueta.textContent = acorde ? nombreVisible(acorde) : "–";
+  etiqueta.textContent = acorde ? nombreParaMostrar(acorde) : "–";
 }
 
 // Al tocar un diagrama pasamos a la siguiente posición de ese acorde
@@ -1555,8 +1690,9 @@ function dibujarDiagramaPar(boton, etiqueta, acorde) {
 // y vale para todas las veces que aparece el acorde.
 function cambiarPosicion(acorde) {
   if (!acorde) return;
-  const clave = nombreNormalizado(acorde.acorde);
-  const total = posicionesDeAcorde(acorde.acorde).length;
+  const forma = formaDe(acorde.acorde);
+  const clave = clavePosicion(forma);
+  const total = posicionesDeAcorde(forma).length;
   if (!clave || total < 2) return;
 
   posicionElegida[clave] = ((posicionElegida[clave] || 0) + 1) % total;

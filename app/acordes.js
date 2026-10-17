@@ -99,6 +99,69 @@ function normalizarAcorde(nombre) {
   return { raiz: (semitono + 12) % 12, tipo: TIPOS_EQUIVALENTES[tipoEscrito] };
 }
 
+/* ==================================================================
+   Transportar y escribir con sostenidos o bemoles
+   ================================================================== */
+
+// Tres formas de escribir las 12 notas.
+const NOMBRES_SOSTENIDOS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOMBRES_BEMOLES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+// Para C mayor / A menor (sin alteraciones) usamos los nombres más comunes.
+const NOMBRES_NEUTROS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+
+// Según la armadura de cada tonalidad MAYOR (por su tónica, 0 = C):
+// "b" = se escribe con bemoles (F, Bb, Eb, Ab, Db), "#" = con sostenidos
+// (G, D, A, E, B, F#), "" = sin alteraciones (C). Las enarmónicas se
+// escriben con la versión de menos alteraciones (Db y no C#, Ab y no G#).
+const ARMADURA_MAYOR = ["", "b", "#", "b", "#", "b", "#", "#", "b", "#", "b", "#"];
+
+/**
+ * Los nombres de las notas que corresponden a una tonalidad.
+ * Una tonalidad menor usa la armadura de su relativa mayor (3 semitonos
+ * arriba): Dm usa la de F (bemoles), C#m la de E (sostenidos).
+ * Si no se conoce la tonalidad, se usan los nombres neutros.
+ */
+function nombresDeNotas(tonalidad) {
+  if (!tonalidad) return NOMBRES_NEUTROS;
+  const relativaMayor = tonalidad.modo === "m" ? (tonalidad.tonica + 3) % 12 : tonalidad.tonica;
+  const armadura = ARMADURA_MAYOR[relativaMayor];
+  if (armadura === "b") return NOMBRES_BEMOLES;
+  if (armadura === "#") return NOMBRES_SOSTENIDOS;
+  return NOMBRES_NEUTROS;
+}
+
+/** "C#m" -> { tonica: 1, modo: "m" }. null si no se reconoce. */
+function leerTonalidad(nombre) {
+  const acorde = nombre ? normalizarAcorde(nombre) : null;
+  if (!acorde || (acorde.tipo !== "" && acorde.tipo !== "m")) return null;
+  return { tonica: acorde.raiz, modo: acorde.tipo };
+}
+
+/** Sube o baja una tonalidad: ({ tonica: 1, modo: "m" }, 2) -> { tonica: 3, modo: "m" }. */
+function moverTonalidad(tonalidad, semitonos) {
+  if (!tonalidad) return null;
+  return { tonica: (((tonalidad.tonica + semitonos) % 12) + 12) % 12, modo: tonalidad.modo };
+}
+
+/** Nombre de una tonalidad escrito según su propia armadura: Eb, no D#; Bbm, no A#m. */
+function nombreDeTonalidad(tonalidad) {
+  if (!tonalidad) return "";
+  return nombresDeNotas(tonalidad)[tonalidad.tonica] + tonalidad.modo;
+}
+
+/**
+ * Transporta un acorde y lo escribe con los nombres de "tonalidad".
+ *   transportarAcorde("C#m7", 2, { tonica: 3, modo: "m" }) -> "Ebm7"
+ * "N" (sin acorde) y los nombres desconocidos quedan igual.
+ */
+function transportarAcorde(nombre, semitonos, tonalidad) {
+  if (nombre === "N") return "N";
+  const acorde = normalizarAcorde(nombre);
+  if (!acorde) return nombre;
+  const raiz = (((acorde.raiz + semitonos) % 12) + 12) % 12;
+  return nombresDeNotas(tonalidad)[raiz] + acorde.tipo;
+}
+
 /** Nombre normalizado como texto: "Ab" -> "G#". */
 function nombreNormalizado(nombre) {
   const acorde = normalizarAcorde(nombre);

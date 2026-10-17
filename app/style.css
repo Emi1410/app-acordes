@@ -919,6 +919,61 @@ body {
   color: var(--acento-texto);
 }
 
+/* Fila con nombre, botones − / + y el valor en el medio (transportar, cejilla) */
+.paso {
+  display: grid;
+  grid-template-columns: 92px 48px 1fr 48px auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto-suave);
+}
+
+.paso button {
+  min-width: 48px;
+  min-height: 44px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.paso button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.paso output {
+  text-align: center;
+  color: var(--texto);
+  font-size: 1.2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.etiqueta-opcion {
+  color: var(--texto-suave);
+}
+
+/* La botonera de afinación tiene textos más largos: una opción por fila */
+#afinaciones {
+  grid-template-columns: 1fr;
+}
+
+/* Aviso en la pantalla principal cuando hay transporte, cejilla o afinación */
+.indicador-acordes {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--acento);
+  border-radius: 12px;
+  color: var(--acento);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
 .control-volumen {
   display: grid;
   grid-template-columns: 92px 1fr;

@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.8">
+  <link rel="stylesheet" href="style.css?v=1.9">
 </head>
 <body>
 
@@ -102,6 +102,9 @@
       <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
       <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
     </div>
+
+    <!-- Aviso de transporte, cejilla o afinación activos ("Cejilla 4 · formas de C") -->
+    <p id="indicador-acordes" class="indicador-acordes" hidden></p>
 
     <!-- ===== Vista de pulsos (tipo Chordify) ===== -->
     <div id="vista-pulsos" class="vista-pulsos">
@@ -232,6 +235,34 @@
       </section>
 
       <section class="grupo-opciones">
+        <h3>Acordes <small>(cambia lo que se muestra, no el sonido)</small></h3>
+
+        <!-- Transportar: de -6 a +6 semitonos -->
+        <div class="paso">
+          <span>Transportar</span>
+          <button id="transporte-menos" type="button" aria-label="Bajar un semitono">−1</button>
+          <output id="valor-transporte">0</output>
+          <button id="transporte-mas" type="button" aria-label="Subir un semitono">+1</button>
+          <button id="transporte-cero" type="button" aria-label="Volver al tono original">0</button>
+        </div>
+
+        <!-- Cejilla (capo): de 0 a 9 -->
+        <div class="paso">
+          <span>Cejilla</span>
+          <button id="cejilla-menos" type="button" aria-label="Bajar la cejilla">−</button>
+          <output id="valor-cejilla">No</output>
+          <button id="cejilla-mas" type="button" aria-label="Subir la cejilla">+</button>
+        </div>
+
+        <span class="etiqueta-opcion">Afinación de la guitarra</span>
+        <div id="afinaciones" class="botonera" role="group" aria-label="Afinación">
+          <button type="button" data-afinacion="0">Estándar</button>
+          <button type="button" data-afinacion="-1">½ tono abajo (Eb)</button>
+          <button type="button" data-afinacion="-2">1 tono abajo (D)</button>
+        </div>
+      </section>
+
+      <section class="grupo-opciones">
         <h3>Volumen</h3>
         <label class="control-volumen">
           <span>Canción</span>
@@ -283,10 +314,10 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.8"></script>
-  <script src="diagrama.js?v=1.8"></script>
-  <script src="biblioteca.js?v=1.8"></script>
-  <script src="analizador.js?v=1.8"></script>
-  <script src="app.js?v=1.8"></script>
+  <script src="acordes.js?v=1.9"></script>
+  <script src="diagrama.js?v=1.9"></script>
+  <script src="biblioteca.js?v=1.9"></script>
+  <script src="analizador.js?v=1.9"></script>
+  <script src="app.js?v=1.9"></script>
 </body>
 </html>
