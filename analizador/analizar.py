@@ -378,7 +378,43 @@ def armar_tramos(tramos, tiempos):
 
 
 # ---------------------------------------------------------------------------
-# 7. Guardar el JSON y mostrar en la terminal
+# 7. Compases
+# ---------------------------------------------------------------------------
+
+# Cantidad de pulsos por compás (4/4, lo más común en rock y pop).
+PULSOS_POR_COMPAS = 4
+
+
+def calcular_compases(tiempos_pulsos, tramos):
+    """
+    Elige en qué pulsos empieza cada compás.
+
+    Con 4 pulsos por compás hay 4 posibilidades: que el primer compás empiece
+    en el pulso 0, 1, 2 o 3 (el "desfasaje"). Elegimos la que hace que más
+    cambios de acorde caigan en el primer tiempo de un compás, porque en la
+    música los acordes suelen cambiar ahí.
+    Devuelve los tiempos (en segundos) en que empieza cada compás.
+    """
+    if len(tiempos_pulsos) == 0:
+        return np.array([])
+
+    # Para cada cambio de acorde, buscamos el pulso en el que cae.
+    cambios = []
+    for tramo in tramos[1:]:
+        distancias = np.abs(tiempos_pulsos - tramo["inicio"])
+        pulso = int(np.argmin(distancias))
+        if distancias[pulso] < 0.05:   # el cambio cae justo en un pulso
+            cambios.append(pulso)
+
+    # Puntaje de cada desfasaje: cuántos cambios caen en el primer tiempo.
+    puntajes = [sum(1 for p in cambios if (p - desfasaje) % PULSOS_POR_COMPAS == 0)
+                for desfasaje in range(PULSOS_POR_COMPAS)]
+    mejor = int(np.argmax(puntajes))   # si empatan, el primero
+    return tiempos_pulsos[mejor::PULSOS_POR_COMPAS]
+
+
+# ---------------------------------------------------------------------------
+# 8. Guardar el JSON y mostrar en la terminal
 # ---------------------------------------------------------------------------
 
 def formato_minutos(segundos):
@@ -387,8 +423,14 @@ def formato_minutos(segundos):
     return f"{segundos // 60}:{segundos % 60:02d}"
 
 
-def guardar_json(nombre, tempo, tonalidad, tramos):
-    """Guarda el resultado en resultados/<nombre>.json y devuelve la ruta."""
+def guardar_json(nombre, tempo, tonalidad, tramos, pulsos, compases):
+    """
+    Guarda el resultado en resultados/<nombre>.json y devuelve la ruta.
+
+    "pulsos" y "compases" son listas de segundos (cuándo cae cada pulso y
+    cuándo empieza cada compás). Se agregaron después: los programas que
+    leían el formato anterior los ignoran y siguen funcionando.
+    """
     carpeta = RAIZ_PROYECTO / "resultados"
     carpeta.mkdir(exist_ok=True)
     ruta = carpeta / f"{nombre}.json"
@@ -397,6 +439,8 @@ def guardar_json(nombre, tempo, tonalidad, tramos):
         "tempo": round(tempo, 1),
         "tonalidad": nombre_tonalidad(tonalidad),
         "acordes": tramos,
+        "pulsos": [round(float(t), 3) for t in pulsos],
+        "compases": [round(float(t), 3) for t in compases],
     }
     # ensure_ascii=False mantiene los acentos y las eñes tal cual.
     with open(ruta, "w", encoding="utf-8") as archivo:
@@ -435,10 +479,15 @@ def main():
     tramos = agregar_septimas(agrupar(acordes), croma_pulsos)
     tramos = armar_tramos(tramos, tiempos)
 
-    ruta_json = guardar_json(nombre, tempo, tonalidad, tramos)
+    # Pulsos en segundos y en qué pulsos empieza cada compás.
+    tiempos_pulsos = librosa.frames_to_time(frames_pulsos, sr=sr)
+    compases = calcular_compases(tiempos_pulsos, tramos)
+
+    ruta_json = guardar_json(nombre, tempo, tonalidad, tramos, tiempos_pulsos, compases)
 
     print(f"\nTempo: {tempo:.1f} BPM  |  Tonalidad: {nombre_tonalidad(tonalidad)} "
-          f"({nombre_tonalidad_espanol(tonalidad)})  |  {len(tramos)} tramos de acordes\n")
+          f"({nombre_tonalidad_espanol(tonalidad)})  |  {len(tramos)} tramos de acordes  |  "
+          f"{len(tiempos_pulsos)} pulsos, {len(compases)} compases\n")
     for tramo in tramos:
         print(f"{formato_minutos(tramo['inicio']):>5}  {tramo['acorde']}")
     print(f"\nGuardado en {ruta_json}")

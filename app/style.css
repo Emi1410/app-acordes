@@ -90,6 +90,166 @@ body {
 /* ------------------------------------------------------------------
    Biblioteca: lista de canciones
    ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------
+   Reproductor: selector de vista (Pulsos / Grilla)
+   ------------------------------------------------------------------ */
+.selector-vista {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--superficie);
+}
+
+.selector-vista button {
+  min-height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* El botón de la vista elegida queda "prendido" */
+.selector-vista button[aria-pressed="true"] {
+  background: var(--acento);
+  color: var(--acento-texto);
+}
+
+/* ------------------------------------------------------------------
+   Vista de pulsos: tira de casilleros + dos diagramas
+   ------------------------------------------------------------------ */
+.vista-pulsos {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aviso-pulsos {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--superficie);
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* La tira se desplaza en horizontal; la barra de desplazamiento no se ve */
+.tira {
+  flex: none;
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-top: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+}
+
+.tira::-webkit-scrollbar {
+  display: none;
+}
+
+/* Un casillero por pulso */
+.pulso {
+  flex: none;
+  width: 48px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding-left: 6px;
+  border-left: 1px solid var(--borde);
+  color: var(--texto);
+  font-size: 1.15rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Primer pulso de cada compás: línea más gruesa a la izquierda */
+.pulso.compas {
+  border-left: 3px solid var(--texto-suave);
+}
+
+/* Donde cambia el acorde, el nombre se puede salir del casillero (C#m7) */
+.pulso.cambio {
+  overflow: visible;
+}
+
+/* Pulso que suena ahora */
+.pulso.actual {
+  background: var(--acento);
+  color: var(--acento-texto);
+}
+
+/* Los dos diagramas, uno al lado del otro y del mismo tamaño */
+.par-diagramas {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.columna-diagrama {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 0;
+  color: var(--texto-suave);
+}
+
+.diagrama-par {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 160px;
+  min-height: 120px;          /* ocupa lugar aunque no haya diagrama */
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  cursor: pointer;
+}
+
+.diagrama-par:disabled {
+  cursor: default;
+}
+
+.diagrama-par .diagrama {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 34dvh;
+}
+
+.diagrama-par small {
+  font-size: 0.8rem;
+}
+
+.nombre-par {
+  font-size: 2rem;
+  color: var(--texto);
+}
+
+/* El acorde que suena, en amarillo (diagrama y nombre) */
+.columna-diagrama:first-child .nombre-par {
+  color: var(--acento);
+}
+
+.columna-diagrama:first-child .diagrama .punto {
+  fill: var(--acento);
+}
+
 /* Buscador arriba de todo */
 .buscador {
   min-height: var(--alto-boton);

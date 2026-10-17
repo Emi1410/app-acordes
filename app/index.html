@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.6">
+  <link rel="stylesheet" href="style.css?v=1.7">
 </head>
 <body>
 
@@ -93,8 +93,41 @@
               aria-label="Volver a analizar la canción" title="Volver a analizar">↻</button>
     </header>
 
-    <!-- Acorde actual (grande), su diagrama, y el que viene (chico) -->
-    <div class="pantalla">
+    <!-- Selector de vista: tira de pulsos o grilla de acordes (se recuerda la elección) -->
+    <div class="selector-vista" role="group" aria-label="Vista del reproductor">
+      <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
+      <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
+    </div>
+
+    <!-- ===== Vista de pulsos (tipo Chordify) ===== -->
+    <div id="vista-pulsos" class="vista-pulsos">
+      <!-- Aviso para canciones analizadas antes de que se guardaran los pulsos -->
+      <p id="aviso-pulsos" class="aviso-pulsos" hidden>
+        Pulsos aproximados según el tempo. Tocá ↻ para calcular los compases exactos.
+      </p>
+
+      <!-- Un casillero por pulso; se desplaza sola. Tocar un casillero salta a ese pulso. -->
+      <div id="tira" class="tira"></div>
+
+      <!-- Diagramas del acorde actual y del siguiente, del mismo tamaño -->
+      <div class="par-diagramas">
+        <div class="columna-diagrama">
+          <button id="diagrama-ahora" class="diagrama-par" type="button"
+                  aria-label="Cambiar la posición del acorde actual"></button>
+          <b id="nombre-ahora" class="nombre-par">–</b>
+          <small>Ahora</small>
+        </div>
+        <div class="columna-diagrama">
+          <button id="diagrama-despues" class="diagrama-par" type="button"
+                  aria-label="Cambiar la posición del próximo acorde"></button>
+          <b id="nombre-despues" class="nombre-par">–</b>
+          <small id="cuenta-despues">Sigue</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Vista de grilla: acorde actual (grande), su diagrama, y el que viene (chico) ===== -->
+    <div id="vista-grilla" class="pantalla">
       <div id="acorde-actual" class="acorde-actual">–</div>
 
       <!-- Diagrama del acorde actual. Es un botón: al tocarlo cambia de posición. -->
@@ -177,10 +210,10 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.6"></script>
-  <script src="diagrama.js?v=1.6"></script>
-  <script src="biblioteca.js?v=1.6"></script>
-  <script src="analizador.js?v=1.6"></script>
-  <script src="app.js?v=1.6"></script>
+  <script src="acordes.js?v=1.7"></script>
+  <script src="diagrama.js?v=1.7"></script>
+  <script src="biblioteca.js?v=1.7"></script>
+  <script src="analizador.js?v=1.7"></script>
+  <script src="app.js?v=1.7"></script>
 </body>
 </html>

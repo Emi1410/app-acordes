@@ -255,12 +255,14 @@ function guardarAjuste(id, ajuste) {
  * Reemplaza el análisis de una canción (al volver a analizarla).
  * Se mantienen el nombre, el ajuste de sincronización y el mp3.
  */
-function actualizarAnalisis(id, { tonalidad, tempo, acordes }) {
+function actualizarAnalisis(id, { tonalidad, tempo, acordes, pulsos, compases }) {
   return transaccion(["canciones"], "readwrite", (tx) => {
     const almacen = tx.objectStore("canciones");
     const pedido = almacen.get(id);
     pedido.addEventListener("success", () => {
-      if (pedido.result) almacen.put({ ...pedido.result, tonalidad, tempo, acordes });
+      if (pedido.result) {
+        almacen.put({ ...pedido.result, tonalidad, tempo, acordes, pulsos, compases });
+      }
     });
   });
 }
@@ -340,5 +342,19 @@ function validarDatosCancion(datos) {
   if (datos.tempo !== undefined && typeof datos.tempo !== "number") {
     return "El \"tempo\" del JSON tiene que ser un número.";
   }
+  // "pulsos" y "compases" son opcionales (los JSON viejos no los tienen),
+  // pero si vienen tienen que ser listas de segundos en orden.
+  for (const campo of ["pulsos", "compases"]) {
+    if (datos[campo] === undefined) continue;
+    const lista = datos[campo];
+    const valida = Array.isArray(lista)
+      && lista.every((t, i) => typeof t === "number" && (i === 0 || t >= lista[i - 1]));
+    if (!valida) return `El campo "${campo}" del JSON tiene que ser una lista de segundos en orden.`;
+  }
   return null;
+}
+
+/** Devuelve la lista si es una lista de números, o undefined (para no guardar basura). */
+function listaDeTiempos(lista) {
+  return Array.isArray(lista) && lista.every((t) => typeof t === "number") ? lista : undefined;
 }

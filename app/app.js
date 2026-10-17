@@ -66,6 +66,19 @@ const lista = document.getElementById("lista");
 const diagramaActual = document.getElementById("diagrama-actual");
 const diagramaSiguiente = document.getElementById("diagrama-siguiente");
 
+// Vista de pulsos
+const botonVistaPulsos = document.getElementById("boton-vista-pulsos");
+const botonVistaGrilla = document.getElementById("boton-vista-grilla");
+const vistaPulsos = document.getElementById("vista-pulsos");
+const vistaGrilla = document.getElementById("vista-grilla");
+const avisoPulsos = document.getElementById("aviso-pulsos");
+const tira = document.getElementById("tira");
+const diagramaAhora = document.getElementById("diagrama-ahora");
+const diagramaDespues = document.getElementById("diagrama-despues");
+const nombreAhora = document.getElementById("nombre-ahora");
+const nombreDespues = document.getElementById("nombre-despues");
+const cuentaDespues = document.getElementById("cuenta-despues");
+
 /* ==================================================================
    Estado de la app
    ================================================================== */
@@ -82,6 +95,23 @@ let ajuste = 0;
 
 // Posición en "acordes" del acorde que se está mostrando (-1 = ninguno).
 let indiceActual = -1;
+
+// Pulsos de la canción abierta (en segundos), cuáles empiezan un compás y
+// qué acorde suena en cada uno. Se arman al abrir la canción.
+let pulsos = [];
+let esCompas = [];
+let acordePorPulso = [];
+
+// Posición en "pulsos" del pulso que se está mostrando (-1 = ninguno).
+let indicePulso = -1;
+
+// Vista elegida en el reproductor: "pulsos" (tira tipo Chordify) o "grilla".
+let vista = "pulsos";
+try {
+  if (localStorage.getItem("vista") === "grilla") vista = "grilla";
+} catch {
+  // sin localStorage: se usa la vista de pulsos
+}
 
 // true mientras el usuario arrastra la barra de tiempo con el dedo,
 // para no pisarle la posición mientras la mueve.
@@ -630,6 +660,8 @@ botonGuardar.addEventListener("click", async () => {
       tonalidad: typeof datos.tonalidad === "string" ? datos.tonalidad : "",
       tempo: datos.tempo || 0,
       acordes: datos.acordes,
+      pulsos: listaDeTiempos(datos.pulsos),       // undefined si el JSON es viejo
+      compases: listaDeTiempos(datos.compases),
       ajuste: 0,
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
@@ -727,6 +759,7 @@ async function cargarCancion(id) {
   cuentaRegresiva.textContent = "";
   mostrarAjuste();
   dibujarLista();
+  prepararPulsos(cancion);
   mostrarDiagramas();
   actualizar();
   return true;
@@ -868,9 +901,13 @@ function actualizar() {
 
   // Cuenta regresiva hasta el próximo cambio (se actualiza siempre)
   const siguiente = acordes[indice + 1];
-  cuentaRegresiva.textContent = siguiente
-    ? `en ${Math.max(0, siguiente.inicio - t).toFixed(1)} s`
-    : "";
+  const cuenta = siguiente ? `en ${Math.max(0, siguiente.inicio - t).toFixed(1)} s` : "";
+  cuentaRegresiva.textContent = cuenta;
+  cuentaDespues.textContent = cuenta || "Fin";
+
+  // Tira de pulsos: como "t" ya tiene restado el ajuste, los botones ±0.1 s
+  // también corren el pulso resaltado.
+  actualizarTira(t);
 
   // El resto solo cambia cuando cambia el acorde, para no trabajar de más.
   if (indice === indiceActual) return;
@@ -890,6 +927,173 @@ function actualizar() {
   const itemActual = lista.children[indice];
   if (itemActual) itemActual.scrollIntoView({ block: "center", behavior: "smooth" });
 }
+
+/* ==================================================================
+   Vista de pulsos (tipo Chordify)
+   ================================================================== */
+
+// Cantidad de pulsos por compás (igual que en los analizadores).
+const PULSOS_POR_COMPAS = 4;
+
+// Índice del valor de "lista" (ordenada) más cercano a t.
+function masCercano(lista, t) {
+  let bajo = 0, alto = lista.length - 1;
+  while (bajo < alto) {
+    const medio = (bajo + alto) >> 1;
+    if (lista[medio] < t) bajo = medio + 1;
+    else alto = medio;
+  }
+  if (bajo > 0 && Math.abs(lista[bajo - 1] - t) <= Math.abs(lista[bajo] - t)) return bajo - 1;
+  return bajo;
+}
+
+/**
+ * Elige dónde empiezan los compases: de los 4 desfasajes posibles, el que
+ * hace que más cambios de acorde caigan en el primer tiempo. Es la misma
+ * regla que usan analizar.py y analizador.js; acá se usa solo para las
+ * canciones viejas, que no traen los compases guardados.
+ */
+function compasesPorCambios(tiemposPulsos) {
+  const cambios = acordes.slice(1)
+    .map((a) => masCercano(tiemposPulsos, a.inicio))
+    .filter((p, k) => Math.abs(tiemposPulsos[p] - acordes[k + 1].inicio) < 0.08);
+  let mejor = 0, mejorPuntaje = -1;
+  for (let desfasaje = 0; desfasaje < PULSOS_POR_COMPAS; desfasaje++) {
+    const puntaje = cambios.filter((p) => (p - desfasaje) % PULSOS_POR_COMPAS === 0).length;
+    if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = desfasaje; }
+  }
+  return tiemposPulsos.filter((_, i) => i >= mejor && (i - mejor) % PULSOS_POR_COMPAS === 0);
+}
+
+/**
+ * Para canciones analizadas antes de que se guardaran los pulsos: arma una
+ * grilla pareja a partir del tempo. Como los acordes del analizador cambian
+ * justo en un pulso, probamos alinear la grilla con cada cambio de acorde y
+ * nos quedamos con la alineación que deja más cambios sobre un pulso.
+ */
+function pulsosAproximados(cancion) {
+  const tempo = cancion.tempo > 30 ? cancion.tempo : 120;   // sin tempo: 120 BPM
+  const periodo = 60 / tempo;
+  const fin = acordes[acordes.length - 1].fin;
+  const cambios = acordes.slice(1).map((a) => a.inicio);
+
+  // Distancia de un tiempo a la grilla más cercana con esa fase.
+  const distancia = (x, fase) => {
+    const resto = (((x - fase) % periodo) + periodo) % periodo;
+    return Math.min(resto, periodo - resto);
+  };
+  let fase = 0, mejor = -1;
+  for (const c of cambios) {
+    const candidata = c % periodo;
+    const cerca = cambios.filter((x) => distancia(x, candidata) < 0.08).length;
+    if (cerca > mejor) { mejor = cerca; fase = candidata; }
+  }
+
+  const resultado = [];
+  for (let t = fase; t < fin; t += periodo) resultado.push(t);
+  return resultado;
+}
+
+/**
+ * Prepara la tira de la canción abierta: usa los pulsos y compases
+ * guardados, o los aproxima si la canción es vieja.
+ */
+function prepararPulsos(cancion) {
+  const tienePulsos = Array.isArray(cancion.pulsos) && cancion.pulsos.length >= 2;
+  pulsos = tienePulsos ? cancion.pulsos : pulsosAproximados(cancion);
+  avisoPulsos.hidden = tienePulsos;
+
+  const compases = tienePulsos && Array.isArray(cancion.compases) && cancion.compases.length
+    ? cancion.compases
+    : compasesPorCambios(pulsos);
+  esCompas = pulsos.map(() => false);
+  for (const c of compases) esCompas[masCercano(pulsos, c)] = true;
+
+  // Acorde de cada pulso: el que suena en la mitad del pulso (así no importa
+  // si el cambio de acorde quedó redondeado unos milisegundos antes o después).
+  acordePorPulso = pulsos.map((inicio, i) => {
+    const fin = i + 1 < pulsos.length ? pulsos[i + 1] : inicio + (inicio - pulsos[i - 1]);
+    const k = buscarIndice((inicio + fin) / 2);
+    return k >= 0 ? acordes[k].acorde : "N";
+  });
+
+  indicePulso = -1;
+  dibujarTira();
+}
+
+// Un casillero por pulso. El nombre del acorde va solo donde cambia, y los
+// casilleros que empiezan un compás tienen la línea izquierda más gruesa.
+function dibujarTira() {
+  tira.replaceChildren();
+  pulsos.forEach((_, i) => {
+    const celda = document.createElement("div");
+    celda.className = "pulso";
+    celda.dataset.indice = i;
+    if (esCompas[i]) celda.classList.add("compas");
+    const acorde = acordePorPulso[i];
+    if (i === 0 || acorde !== acordePorPulso[i - 1]) {
+      celda.textContent = nombreVisible(acorde);
+      celda.classList.add("cambio");
+    }
+    tira.appendChild(celda);
+  });
+  tira.scrollLeft = 0;
+}
+
+// Tocar un casillero salta a ese pulso (sumando el ajuste, para que coincida).
+tira.addEventListener("click", (evento) => {
+  const celda = evento.target.closest(".pulso");
+  if (!celda || idActual === null) return;
+  audio.currentTime = Math.max(0, pulsos[Number(celda.dataset.indice)] + ajuste);
+  actualizar();
+});
+
+// Resalta el pulso que suena en "t" y desplaza la tira para que se vea.
+function actualizarTira(t) {
+  // Último pulso que ya empezó (-1 antes del primero).
+  let indice = -1;
+  if (pulsos.length && t >= pulsos[0]) {
+    indice = masCercano(pulsos, t);
+    if (pulsos[indice] > t) indice--;
+  }
+  if (indice === indicePulso) return;
+
+  const anterior = tira.children[indicePulso];
+  if (anterior) anterior.classList.remove("actual");
+  indicePulso = indice;
+  const celda = tira.children[indice];
+  if (!celda) return;
+  celda.classList.add("actual");
+
+  // El pulso actual queda a un tercio del borde izquierdo: se ve lo que viene.
+  if (!vistaPulsos.hidden) {
+    tira.scrollTo({ left: celda.offsetLeft - tira.clientWidth / 3, behavior: "smooth" });
+  }
+}
+
+// Alterna entre la vista de pulsos y la grilla, y recuerda la elección.
+function aplicarVista(nueva) {
+  vista = nueva;
+  const enPulsos = vista === "pulsos";
+  vistaPulsos.hidden = !enPulsos;
+  vistaGrilla.hidden = enPulsos;
+  lista.hidden = enPulsos;
+  botonVistaPulsos.setAttribute("aria-pressed", String(enPulsos));
+  botonVistaGrilla.setAttribute("aria-pressed", String(!enPulsos));
+  try {
+    localStorage.setItem("vista", vista);
+  } catch {
+    // no es grave: solo no se recuerda
+  }
+  // Forzamos a redibujar para que la vista que aparece quede en el lugar actual.
+  indiceActual = -1;
+  indicePulso = -1;
+  for (const celda of tira.querySelectorAll(".actual")) celda.classList.remove("actual");
+  actualizar();
+}
+
+botonVistaPulsos.addEventListener("click", () => aplicarVista("pulsos"));
+botonVistaGrilla.addEventListener("click", () => aplicarVista("grilla"));
 
 // Mientras suena, pedimos al navegador que llame a "actualizar" en cada
 // cuadro de la pantalla (~60 veces por segundo). Es mucho más preciso que
@@ -936,15 +1140,36 @@ function mostrarDiagramas() {
   const chico = siguiente ? posicionParaDibujar(siguiente.acorde) : null;
   diagramaSiguiente.replaceChildren();
   if (chico) diagramaSiguiente.appendChild(dibujarDiagrama(chico.posicion));
+
+  // Vista de pulsos: los dos diagramas del mismo tamaño, con el nombre abajo.
+  // Si es "N" o no hay posición, el casillero queda vacío pero ocupa lugar,
+  // así la pantalla no salta.
+  dibujarDiagramaPar(diagramaAhora, nombreAhora, actual ? actual.acorde : null);
+  dibujarDiagramaPar(diagramaDespues, nombreDespues, siguiente ? siguiente.acorde : null);
 }
 
-// Al tocar el diagrama grande pasamos a la siguiente posición de ese acorde
-// (y después de la última, vuelve a la primera). La elección se recuerda.
-diagramaActual.addEventListener("click", () => {
-  const actual = acordes[indiceActual];
-  if (!actual) return;
-  const clave = nombreNormalizado(actual.acorde);
-  const total = posicionesDeAcorde(actual.acorde).length;
+function dibujarDiagramaPar(boton, etiqueta, acorde) {
+  const elegida = acorde ? posicionParaDibujar(acorde) : null;
+  boton.replaceChildren();
+  if (elegida) {
+    boton.appendChild(dibujarDiagrama(elegida.posicion));
+    if (elegida.total > 1) {
+      const posicion = document.createElement("small");
+      posicion.textContent = `${elegida.numero}/${elegida.total}`;
+      boton.appendChild(posicion);
+    }
+  }
+  boton.disabled = !elegida || elegida.total < 2;
+  etiqueta.textContent = acorde ? nombreVisible(acorde) : "–";
+}
+
+// Al tocar un diagrama pasamos a la siguiente posición de ese acorde
+// (y después de la última, vuelve a la primera). La elección se recuerda
+// y vale para todas las veces que aparece el acorde.
+function cambiarPosicion(acorde) {
+  if (!acorde) return;
+  const clave = nombreNormalizado(acorde.acorde);
+  const total = posicionesDeAcorde(acorde.acorde).length;
   if (!clave || total < 2) return;
 
   posicionElegida[clave] = ((posicionElegida[clave] || 0) + 1) % total;
@@ -954,7 +1179,11 @@ diagramaActual.addEventListener("click", () => {
     // Si no se puede guardar, igual queda recordada mientras la app esté abierta.
   }
   mostrarDiagramas();
-});
+}
+
+diagramaActual.addEventListener("click", () => cambiarPosicion(acordes[indiceActual]));
+diagramaAhora.addEventListener("click", () => cambiarPosicion(acordes[indiceActual]));
+diagramaDespues.addEventListener("click", () => cambiarPosicion(acordes[indiceActual + 1]));
 
 /* ==================================================================
    Controles del reproductor
@@ -1058,4 +1287,5 @@ document.addEventListener("visibilitychange", () => {
    Inicio
    ================================================================== */
 
+aplicarVista(vista);
 mostrarBiblioteca();

@@ -46,7 +46,7 @@
   <div id="estado"></div>
   <div id="resultado"></div>
 
-  <script src="../app/analizador.js?v=1.4"></script>
+  <script src="../app/analizador.js?v=1.7"></script>
   <script>
     "use strict";
 
@@ -83,6 +83,14 @@
       return { exacto: pct(exacto), triada: pct(triada), mismaRaiz: pct(mismaRaiz) };
     }
 
+    // Porcentaje de los tiempos de "a" que tienen uno de "b" a menos de 0,07 s.
+    // Sirve para comparar pulsos y compases (los JSON viejos no los tienen).
+    function tiemposEnComun(a, b) {
+      if (!Array.isArray(a) || !Array.isArray(b) || a.length === 0) return null;
+      const cerca = a.filter((t) => b.some((u) => Math.abs(t - u) < 0.07)).length;
+      return Math.round(1000 * cerca / a.length) / 10;
+    }
+
     boton.addEventListener("click", async () => {
       boton.disabled = true;
       $("resultado").replaceChildren();
@@ -97,6 +105,9 @@
         });
         const segundos = (performance.now() - inicio) / 1000;
         const c = coincidencias(js.acordes, python.acordes);
+        c.pulsos = tiemposEnComun(python.pulsos, js.pulsos);
+        c.compases = tiemposEnComun(python.compases, js.compases);
+        c.cantidades = `${(js.pulsos || []).length} pulsos y ${(js.compases || []).length} compases (Python: ${(python.pulsos || []).length} y ${(python.compases || []).length})`;
 
         $("estado").textContent = `Análisis en JavaScript: ${segundos.toFixed(1)} s`;
         mostrarTabla(js, python, c);
@@ -110,6 +121,9 @@
           `Coinciden (acorde exacto):  ${c.exacto} % del tiempo`,
           `Coinciden (sin mirar la 7): ${c.triada} %`,
           `Coinciden (misma raíz):     ${c.mismaRaiz} %`,
+          `Pulsos/compases JS: ${c.cantidades}`,
+          `Pulsos de Python que tienen uno en JS cerca:   ${c.pulsos === null ? "el JSON no tiene pulsos" : c.pulsos + " %"}`,
+          `Compases de Python que tienen uno en JS cerca: ${c.compases === null ? "el JSON no tiene compases" : c.compases + " %"}`,
           `Duración del análisis: ${segundos.toFixed(1)} s`,
           `Primeros 20 JS: ${js.acordes.slice(0, 20).map((a) => a.acorde).join(" ")}`,
           `Primeros 20 Py: ${python.acordes.slice(0, 20).map((a) => a.acorde).join(" ")}`,
@@ -142,6 +156,10 @@
       fila(tabla, ["Coinciden (exacto)", c.exacto + " % del tiempo", ""]);
       fila(tabla, ["Coinciden (sin la 7)", c.triada + " %", ""]);
       fila(tabla, ["Coinciden (misma raíz)", c.mismaRaiz + " %", ""]);
+      fila(tabla, ["Pulsos", (js.pulsos || []).length, (py.pulsos || []).length]);
+      fila(tabla, ["Compases", (js.compases || []).length, (py.compases || []).length]);
+      if (c.pulsos !== null) fila(tabla, ["Pulsos en común", c.pulsos + " %", ""]);
+      if (c.compases !== null) fila(tabla, ["Compases en común", c.compases + " %", ""]);
       $("resultado").appendChild(tabla);
     }
 

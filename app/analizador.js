@@ -111,14 +111,50 @@ function codigoAnalizador() {
     let acordes = elegirAcordes(cromaPulsos, rmsPulsos, tonalidad);
     acordes = suavizar(acordes);
     const tramos = armarTramos(agregarSeptimas(agrupar(acordes), cromaPulsos), tiempos);
+
+    // Pulsos en segundos y en qué pulsos empieza cada compás.
+    const tiemposPulsos = pulsos.map((frame) => frame * SALTO / SR);
+    const compases = calcularCompases(tiemposPulsos, tramos);
     avisar("Listo", 1);
 
+    const redondear3 = (x) => Math.round(x * 1000) / 1000;
     return {
       cancion: nombre,
       tempo: Math.round(tempo * 10) / 10,
       tonalidad: NOTAS[tonalidad.tonica] + tonalidad.modo,
       acordes: tramos,
+      pulsos: tiemposPulsos.map(redondear3),
+      compases: compases.map(redondear3),
     };
+  }
+
+  /* ----------------------------------------------------------------
+     Compases (calcular_compases en Python)
+
+     Con 4 pulsos por compás hay 4 posibilidades para el primero: que
+     empiece en el pulso 0, 1, 2 o 3. Elegimos la que hace que más cambios
+     de acorde caigan en el primer tiempo de un compás.
+     ---------------------------------------------------------------- */
+  function calcularCompases(tiemposPulsos, tramos) {
+    const PULSOS_POR_COMPAS = 4;
+    if (tiemposPulsos.length === 0) return [];
+
+    // Para cada cambio de acorde, el pulso en el que cae.
+    const cambios = [];
+    for (const tramo of tramos.slice(1)) {
+      let pulso = 0;
+      for (let i = 1; i < tiemposPulsos.length; i++) {
+        if (Math.abs(tiemposPulsos[i] - tramo.inicio) < Math.abs(tiemposPulsos[pulso] - tramo.inicio)) pulso = i;
+      }
+      if (Math.abs(tiemposPulsos[pulso] - tramo.inicio) < 0.05) cambios.push(pulso);
+    }
+
+    let mejor = 0, mejorPuntaje = -1;
+    for (let desfasaje = 0; desfasaje < PULSOS_POR_COMPAS; desfasaje++) {
+      const puntaje = cambios.filter((p) => (p - desfasaje) % PULSOS_POR_COMPAS === 0).length;
+      if (puntaje > mejorPuntaje) { mejorPuntaje = puntaje; mejor = desfasaje; }   // si empatan, el primero
+    }
+    return tiemposPulsos.filter((_, i) => i >= mejor && (i - mejor) % PULSOS_POR_COMPAS === 0);
   }
 
   /* ----------------------------------------------------------------
