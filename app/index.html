@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.3">
+  <link rel="stylesheet" href="style.css?v=1.4">
 </head>
 <body>
 
@@ -48,10 +48,14 @@
       </label>
       <label class="boton boton-archivo">
         <input type="file" id="input-json" accept=".json,application/json" hidden>
-        <span>Elegir acordes</span>
-        <small id="nombre-json">Ningún archivo</small>
+        <span>JSON (opcional)</span>
+        <small id="nombre-json">Lo analiza el celu</small>
       </label>
     </div>
+    <p class="ayuda">
+      Con solo el mp3, la app busca los acordes en el celular.
+      Si ya tenés el JSON que generó el analizador en la compu, podés elegirlo también.
+    </p>
 
     <label class="campo">
       Nombre de la canción
@@ -62,7 +66,7 @@
     <!-- Avisos de error (JSON con formato incorrecto, sin espacio, etc.) -->
     <p id="aviso-agregar" class="aviso-error" role="alert" hidden></p>
 
-    <button id="boton-guardar" class="boton boton-principal" type="button" disabled>Guardar canción</button>
+    <button id="boton-guardar" class="boton boton-principal" type="button" disabled>Analizar y guardar</button>
   </section>
 
   <!-- ==============================================================
@@ -72,6 +76,8 @@
     <header class="encabezado">
       <button id="boton-volver" class="boton boton-volver" type="button" aria-label="Volver a la biblioteca">←</button>
       <p id="titulo" class="titulo"></p>
+      <button id="boton-reanalizar" class="boton boton-volver" type="button"
+              aria-label="Volver a analizar la canción" title="Volver a analizar">↻</button>
     </header>
 
     <!-- Acorde actual (grande), su diagrama, y el que viene (chico) -->
@@ -119,12 +125,24 @@
     <ul id="lista" class="lista"></ul>
   </section>
 
+  <!-- ==============================================================
+       Capa de progreso: tapa la pantalla mientras se analiza un mp3
+       ============================================================== -->
+  <div id="capa-progreso" class="capa-progreso" hidden>
+    <div class="caja-progreso" role="status" aria-live="polite">
+      <p id="texto-progreso">Analizando…</p>
+      <progress id="barra-progreso" max="1" value="0"></progress>
+      <button id="boton-cancelar-analisis" class="boton" type="button">Cancelar</button>
+    </div>
+  </div>
+
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.3"></script>
-  <script src="diagrama.js?v=1.3"></script>
-  <script src="biblioteca.js?v=1.3"></script>
-  <script src="app.js?v=1.3"></script>
+  <script src="acordes.js?v=1.4"></script>
+  <script src="diagrama.js?v=1.4"></script>
+  <script src="biblioteca.js?v=1.4"></script>
+  <script src="analizador.js?v=1.4"></script>
+  <script src="app.js?v=1.4"></script>
 </body>
 </html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparar analizadores</title>
+  <style>
+    /* Mismo estilo oscuro que la app, en versión simple */
+    :root {
+      --fondo: #111418; --superficie: #1d2228; --borde: #2e353d;
+      --texto: #f2f4f6; --texto-suave: #9aa4ae; --acento: #f5b83d;
+      --bien: #7ad67a; --mal: #ff8a8a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 16px; background: var(--fondo); color: var(--texto);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.4;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    p { color: var(--texto-suave); margin: 0 0 16px; }
+    label { display: block; margin-bottom: 12px; }
+    input[type=file] { display: block; margin-top: 4px; color: var(--texto); }
+    button {
+      min-height: 48px; padding: 0 20px; border: none; border-radius: 12px;
+      background: var(--acento); color: #1a1300; font: inherit; font-weight: 700; cursor: pointer;
+    }
+    button:disabled { opacity: 0.4; cursor: default; }
+    progress { width: 100%; height: 12px; margin-top: 12px; accent-color: var(--acento); }
+    table { border-collapse: collapse; margin-top: 16px; width: 100%; max-width: 560px; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid var(--borde); text-align: left; }
+    th { color: var(--texto-suave); font-weight: 500; }
+    .bien { color: var(--bien); }
+    .mal { color: var(--mal); }
+    .tabla-acordes { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <h1>Comparar analizadores</h1>
+  <p>Analiza un mp3 con la versión JavaScript (la del celular) y la compara con el JSON que generó analizar.py.</p>
+
+  <label>mp3 <input type="file" id="mp3" accept="audio/*,.mp3"></label>
+  <label>JSON de Python <input type="file" id="json" accept=".json,application/json"></label>
+  <button id="comparar" type="button" disabled>Comparar</button>
+
+  <progress id="progreso" max="1" value="0" hidden></progress>
+  <div id="estado"></div>
+  <div id="resultado"></div>
+
+  <script src="../app/analizador.js?v=1.4"></script>
+  <script>
+    "use strict";
+
+    const $ = (id) => document.getElementById(id);
+    const mp3 = $("mp3"), json = $("json"), boton = $("comparar");
+
+    // El botón se habilita cuando están los dos archivos.
+    const revisar = () => { boton.disabled = !(mp3.files[0] && json.files[0]); };
+    mp3.addEventListener("change", revisar);
+    json.addEventListener("change", revisar);
+
+    // Acorde que suena en el tiempo t según una lista de tramos ("N" si ninguno).
+    function acordeEn(acordes, t) {
+      for (const tramo of acordes) if (t >= tramo.inicio && t < tramo.fin) return tramo.acorde;
+      return "N";
+    }
+
+    // Raíz y tipo sin séptima: "C#m7" -> "C#m", "B7" -> "B".
+    const sinSeptima = (a) => a.replace(/7$/, "");
+    const raiz = (a) => a.replace(/m?7?$/, "");
+
+    // Porcentaje del tiempo en que los dos análisis coinciden, mirando cada 0,05 s.
+    function coincidencias(js, py) {
+      const fin = Math.min(js[js.length - 1].fin, py[py.length - 1].fin);
+      let total = 0, exacto = 0, triada = 0, mismaRaiz = 0;
+      for (let t = 0; t < fin; t += 0.05) {
+        const a = acordeEn(js, t), b = acordeEn(py, t);
+        total++;
+        if (a === b) exacto++;
+        if (sinSeptima(a) === sinSeptima(b)) triada++;
+        if (raiz(a) === raiz(b)) mismaRaiz++;
+      }
+      const pct = (x) => Math.round(1000 * x / total) / 10;
+      return { exacto: pct(exacto), triada: pct(triada), mismaRaiz: pct(mismaRaiz) };
+    }
+
+    boton.addEventListener("click", async () => {
+      boton.disabled = true;
+      $("resultado").replaceChildren();
+      $("progreso").hidden = false;
+
+      try {
+        const python = JSON.parse(await json.files[0].text());
+        const inicio = performance.now();
+        const js = await analizarMp3(mp3.files[0], python.cancion, (fraccion, etapa) => {
+          $("progreso").value = fraccion;
+          $("estado").textContent = `${etapa}… ${Math.round(fraccion * 100)} %`;
+        });
+        const segundos = (performance.now() - inicio) / 1000;
+        const c = coincidencias(js.acordes, python.acordes);
+
+        $("estado").textContent = `Análisis en JavaScript: ${segundos.toFixed(1)} s`;
+        mostrarTabla(js, python, c);
+        mostrarPrimeros(js, python);
+
+        // Resumen en texto (también lo usa la prueba automática).
+        window.__resultado = [
+          `Tonalidad   JS: ${js.tonalidad}   Python: ${python.tonalidad}`,
+          `Tempo       JS: ${js.tempo}   Python: ${python.tempo}`,
+          `Tramos      JS: ${js.acordes.length}   Python: ${python.acordes.length}`,
+          `Coinciden (acorde exacto):  ${c.exacto} % del tiempo`,
+          `Coinciden (sin mirar la 7): ${c.triada} %`,
+          `Coinciden (misma raíz):     ${c.mismaRaiz} %`,
+          `Duración del análisis: ${segundos.toFixed(1)} s`,
+          `Primeros 20 JS: ${js.acordes.slice(0, 20).map((a) => a.acorde).join(" ")}`,
+          `Primeros 20 Py: ${python.acordes.slice(0, 20).map((a) => a.acorde).join(" ")}`,
+        ].join("\n");
+      } catch (error) {
+        $("estado").textContent = "Error: " + error.message;
+        window.__resultado = "ERROR " + error.message;
+      }
+      $("progreso").hidden = true;
+      boton.disabled = false;
+    });
+
+    function fila(tabla, celdas, clase) {
+      const tr = tabla.insertRow();
+      celdas.forEach((texto, i) => {
+        const td = document.createElement(i === 0 ? "th" : "td");
+        td.textContent = texto;
+        if (clase && i > 0) td.className = clase;
+        tr.appendChild(td);
+      });
+    }
+
+    function mostrarTabla(js, py, c) {
+      const tabla = document.createElement("table");
+      fila(tabla, ["", "JavaScript", "Python"]);
+      fila(tabla, ["Tonalidad", js.tonalidad, py.tonalidad], js.tonalidad === py.tonalidad ? "bien" : "mal");
+      fila(tabla, ["Tempo", js.tempo + " BPM", py.tempo + " BPM"],
+           Math.abs(js.tempo - py.tempo) < 2 ? "bien" : "mal");
+      fila(tabla, ["Tramos", js.acordes.length, py.acordes.length]);
+      fila(tabla, ["Coinciden (exacto)", c.exacto + " % del tiempo", ""]);
+      fila(tabla, ["Coinciden (sin la 7)", c.triada + " %", ""]);
+      fila(tabla, ["Coinciden (misma raíz)", c.mismaRaiz + " %", ""]);
+      $("resultado").appendChild(tabla);
+    }
+
+    // Los primeros 20 tramos de cada uno, lado a lado.
+    function mostrarPrimeros(js, py) {
+      const tabla = document.createElement("table");
+      tabla.className = "tabla-acordes";
+      fila(tabla, ["#", "JavaScript", "Python"]);
+      const m = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+      for (let i = 0; i < 20; i++) {
+        const a = js.acordes[i], b = py.acordes[i];
+        fila(tabla, [String(i + 1), a ? `${m(a.inicio)}  ${a.acorde}` : "", b ? `${m(b.inicio)}  ${b.acorde}` : ""]);
+      }
+      $("resultado").appendChild(tabla);
+    }
+  </script>
+</body>
+</html>

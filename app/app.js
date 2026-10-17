@@ -27,8 +27,15 @@ const inputNombre = document.getElementById("input-nombre");
 const avisoAgregar = document.getElementById("aviso-agregar");
 const botonGuardar = document.getElementById("boton-guardar");
 
+// Capa de progreso del análisis
+const capaProgreso = document.getElementById("capa-progreso");
+const textoProgreso = document.getElementById("texto-progreso");
+const barraProgreso = document.getElementById("barra-progreso");
+const botonCancelarAnalisis = document.getElementById("boton-cancelar-analisis");
+
 // Reproductor
 const botonVolver = document.getElementById("boton-volver");
+const botonReanalizar = document.getElementById("boton-reanalizar");
 const audio = document.getElementById("audio");
 const titulo = document.getElementById("titulo");
 const acordeActual = document.getElementById("acorde-actual");
@@ -71,8 +78,8 @@ let bloqueoPantalla = null;
 
 // Lo elegido en "Agregar canción" hasta que se guarda.
 let mp3Elegido = null;      // el archivo mp3
-let datosElegidos = null;   // el JSON ya leído y validado
-let nombrePropuesto = "";   // el nombre que vino en el JSON
+let datosElegidos = null;   // el JSON (opcional) ya leído y validado
+let nombrePropuesto = "";   // el último nombre que propuso la app (del mp3 o del JSON)
 
 // Posición elegida para cada acorde, por ejemplo { "G#": 1, "C#m": 0 }.
 // Se guarda en el navegador para que se acuerde aunque cierres la app.
@@ -163,8 +170,14 @@ botonCancelar.addEventListener("click", volverABiblioteca);
    Pantalla 1: biblioteca
    ================================================================== */
 
+// Número de la última vez que se pidió dibujar la biblioteca. Como leer la
+// base y calcular el espacio tarda, dos pedidos seguidos pueden terminar en
+// otro orden; con este número solo dibuja el más reciente.
+let dibujoBiblioteca = 0;
+
 // Dibuja la lista de canciones guardadas y el espacio que ocupan.
 async function mostrarBiblioteca() {
+  const numero = ++dibujoBiblioteca;
   let canciones;
   try {
     canciones = await listarCanciones();
@@ -173,6 +186,7 @@ async function mostrarBiblioteca() {
     bibliotecaVacia.textContent = "No pude abrir la biblioteca: " + error.message;
     return;
   }
+  if (numero !== dibujoBiblioteca) return;   // ya hay un pedido más nuevo
 
   listaCanciones.replaceChildren();
   bibliotecaVacia.hidden = canciones.length > 0;
@@ -204,12 +218,12 @@ async function mostrarBiblioteca() {
     listaCanciones.appendChild(item);
   }
 
-  mostrarEspacio(canciones);
+  mostrarEspacio(canciones, numero);
 }
 
 // Pie de la biblioteca: cuánto ocupan las canciones, cuánto espacio queda
 // y si el navegador aceptó guardarlas de forma permanente.
-async function mostrarEspacio(canciones) {
+async function mostrarEspacio(canciones, numero) {
   if (canciones.length === 0) {
     espacio.textContent = "";
     return;
@@ -225,6 +239,7 @@ async function mostrarEspacio(canciones) {
   const persistente = await esPersistente();
   if (persistente === true) partes.push("guardado permanente");
   if (persistente === false) partes.push("el navegador podría borrarlas si falta memoria");
+  if (numero !== dibujoBiblioteca) return;   // llegó tarde: hay datos más nuevos
   espacio.textContent = partes.join(" · ");
 }
 
@@ -257,7 +272,7 @@ function limpiarFormulario() {
   inputMp3.value = "";
   inputJson.value = "";
   nombreMp3.textContent = "Ningún archivo";
-  nombreJson.textContent = "Ningún archivo";
+  nombreJson.textContent = "Lo analiza el celu";
   inputNombre.value = "";
   mostrarAviso("");
   revisarFormulario();
@@ -268,9 +283,20 @@ function mostrarAviso(texto) {
   avisoAgregar.hidden = !texto;
 }
 
-// El botón "Guardar" se habilita solo cuando está todo: mp3, JSON y nombre.
+// El botón se habilita cuando hay mp3 y nombre. Su texto avisa si va a
+// analizar en el celular o si usa el JSON de la compu.
 function revisarFormulario() {
-  botonGuardar.disabled = !(mp3Elegido && datosElegidos && inputNombre.value.trim());
+  botonGuardar.disabled = !(mp3Elegido && inputNombre.value.trim());
+  botonGuardar.textContent = datosElegidos ? "Guardar canción" : "Analizar y guardar";
+}
+
+// Propone un nombre, salvo que el usuario ya haya escrito uno propio.
+function proponerNombre(nombre) {
+  if (!nombre) return;
+  if (!inputNombre.value.trim() || inputNombre.value === nombrePropuesto) {
+    inputNombre.value = nombre;
+  }
+  nombrePropuesto = nombre;
 }
 
 inputMp3.addEventListener("change", () => {
@@ -286,6 +312,8 @@ inputMp3.addEventListener("change", () => {
     mp3Elegido = archivo;
     nombreMp3.textContent = archivo.name;
     mostrarAviso("");
+    // Si no hay JSON, proponemos el nombre del archivo sin ".mp3".
+    if (!datosElegidos) proponerNombre(archivo.name.replace(/\.[^.]+$/, ""));
   }
   revisarFormulario();
 });
@@ -302,13 +330,15 @@ inputJson.addEventListener("change", async () => {
   try {
     datos = JSON.parse(await archivo.text());
   } catch {
-    mostrarAviso(`"${archivo.name}" no es un JSON válido. Elegí el archivo que generó el analizador (está en la carpeta resultados).`);
+    nombreJson.textContent = "Lo analiza el celu";
+    mostrarAviso(`"${archivo.name}" no es un JSON válido. Elegí el archivo que generó el analizador (está en la carpeta resultados), o guardá sin JSON para que lo analice el celu.`);
     revisarFormulario();
     return;
   }
 
   const problema = validarDatosCancion(datos);
   if (problema) {
+    nombreJson.textContent = "Lo analiza el celu";
     mostrarAviso(problema);
     revisarFormulario();
     return;
@@ -316,12 +346,7 @@ inputJson.addEventListener("change", async () => {
 
   datosElegidos = datos;
   mostrarAviso("");
-  // Solo reemplazamos el nombre si el usuario no escribió uno propio.
-  const propuesta = typeof datos.cancion === "string" ? datos.cancion : "";
-  if (!inputNombre.value.trim() || inputNombre.value === nombrePropuesto) {
-    inputNombre.value = propuesta;
-  }
-  nombrePropuesto = propuesta;
+  if (typeof datos.cancion === "string") proponerNombre(datos.cancion);
   revisarFormulario();
 });
 
@@ -329,13 +354,30 @@ inputNombre.addEventListener("input", revisarFormulario);
 
 botonGuardar.addEventListener("click", async () => {
   botonGuardar.disabled = true;
+
+  // Sin JSON de la compu: analizamos el mp3 acá mismo.
+  let datos = datosElegidos;
+  if (!datos) {
+    try {
+      datos = await analizarConProgreso(mp3Elegido, inputNombre.value.trim());
+    } catch (error) {
+      mostrarAviso("No pude analizar el mp3: " + error.message);
+      revisarFormulario();
+      return;
+    }
+    if (!datos) {            // el usuario canceló
+      revisarFormulario();
+      return;
+    }
+  }
+
   botonGuardar.textContent = "Guardando...";
   try {
     await guardarCancion({
       nombre: inputNombre.value.trim(),
-      tonalidad: typeof datosElegidos.tonalidad === "string" ? datosElegidos.tonalidad : "",
-      tempo: datosElegidos.tempo || 0,
-      acordes: datosElegidos.acordes,
+      tonalidad: typeof datos.tonalidad === "string" ? datos.tonalidad : "",
+      tempo: datos.tempo || 0,
+      acordes: datos.acordes,
       ajuste: 0,
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
@@ -345,15 +387,49 @@ botonGuardar.addEventListener("click", async () => {
     mostrarAviso(sinEspacio
       ? "No hay espacio suficiente en el celular para guardar esta canción."
       : "No pude guardar la canción: " + (error ? error.message : "error desconocido"));
-    botonGuardar.textContent = "Guardar canción";
     revisarFormulario();
     return;
   }
 
   // Ya hay al menos una canción: pedimos que el navegador no la borre.
   await pedirPersistencia();
-  botonGuardar.textContent = "Guardar canción";
+  revisarFormulario();
   volverABiblioteca();
+});
+
+/* ==================================================================
+   Análisis en el celular, con barra de progreso
+   ================================================================== */
+
+// Para poder cancelar: AbortController es la forma estándar de avisarle
+// a una tarea en curso que se detenga.
+let controladorAnalisis = null;
+
+/**
+ * Analiza un mp3 mostrando la capa de progreso. Devuelve los datos
+ * (mismo formato que el JSON de la compu), o null si el usuario canceló.
+ */
+async function analizarConProgreso(mp3, nombre) {
+  controladorAnalisis = new AbortController();
+  barraProgreso.value = 0;
+  textoProgreso.textContent = "Preparando…";
+  capaProgreso.hidden = false;
+  try {
+    return await analizarMp3(mp3, nombre, (fraccion, etapa) => {
+      barraProgreso.value = fraccion;
+      textoProgreso.textContent = `${etapa}… ${Math.round(fraccion * 100)} %`;
+    }, controladorAnalisis.signal);
+  } catch (error) {
+    if (error.name === "AbortError") return null;
+    throw error;
+  } finally {
+    capaProgreso.hidden = true;
+    controladorAnalisis = null;
+  }
+}
+
+botonCancelarAnalisis.addEventListener("click", () => {
+  if (controladorAnalisis) controladorAnalisis.abort();
 });
 
 /* ==================================================================
@@ -362,19 +438,26 @@ botonGuardar.addEventListener("click", async () => {
 
 // Abre una canción de la biblioteca en el reproductor.
 async function abrirCancion(id) {
+  if (await cargarCancion(id)) abrirPantalla("reproductor");
+}
+
+// Carga los datos y el mp3 de una canción en el reproductor.
+// Devuelve false si no se pudo.
+async function cargarCancion(id) {
   let cancion, mp3;
   try {
     [cancion, mp3] = await Promise.all([obtenerCancion(id), obtenerAudio(id)]);
   } catch (error) {
     alert("No pude abrir la canción: " + error.message);
-    return;
+    return false;
   }
   if (!cancion || !mp3) {
     alert("No encontré esa canción en la biblioteca.");
     mostrarBiblioteca();
-    return;
+    return false;
   }
 
+  if (audio.src) URL.revokeObjectURL(audio.src); // liberamos la anterior (al recargar)
   idActual = id;
   acordes = cancion.acordes;
   ajuste = cancion.ajuste || 0;
@@ -394,8 +477,29 @@ async function abrirCancion(id) {
   dibujarLista();
   mostrarDiagramas();
   actualizar();
-  abrirPantalla("reproductor");
+  return true;
 }
+
+// Botón "↻": vuelve a analizar en el celular el mp3 guardado y reemplaza
+// los acordes. Se mantienen el nombre y el ajuste de sincronización.
+botonReanalizar.addEventListener("click", async () => {
+  if (idActual === null) return;
+  if (!confirm("¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.")) return;
+
+  const id = idActual;
+  audio.pause();
+  let datos;
+  try {
+    const [cancion, mp3] = await Promise.all([obtenerCancion(id), obtenerAudio(id)]);
+    datos = await analizarConProgreso(mp3, cancion.nombre);
+    if (!datos) return;          // canceló
+    await actualizarAnalisis(id, datos);
+  } catch (error) {
+    alert("No pude volver a analizar la canción: " + error.message);
+    return;
+  }
+  await cargarCancion(id);
+});
 
 // Al salir del reproductor: paramos el audio y liberamos la URL temporal.
 function cerrarReproductor() {

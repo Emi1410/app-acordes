@@ -107,6 +107,20 @@ function guardarAjuste(id, ajuste) {
   });
 }
 
+/**
+ * Reemplaza el análisis de una canción (al volver a analizarla).
+ * Se mantienen el nombre, el ajuste de sincronización y el mp3.
+ */
+function actualizarAnalisis(id, { tonalidad, tempo, acordes }) {
+  return transaccion(["canciones"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("canciones");
+    const pedido = almacen.get(id);
+    pedido.addEventListener("success", () => {
+      if (pedido.result) almacen.put({ ...pedido.result, tonalidad, tempo, acordes });
+    });
+  });
+}
+
 /* ==================================================================
    Almacenamiento persistente y espacio usado
    ================================================================== */
