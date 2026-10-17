@@ -1,0 +1,6 @@
+# Entorno virtual de Python
+venv/
+
+# Canciones (mp3 de entrada)
+canciones/
+*.mp3

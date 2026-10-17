@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <!-- Hace que la página use el ancho real del celular en lugar de "achicarse" -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Color de la barra del navegador en Android -->
+  <meta name="theme-color" content="#111418">
+  <title>App Acordes</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 1. Selección de archivos -->
+  <!-- Cada <label> funciona como botón: al tocarlo abre el selector de su <input> oculto. -->
+  <header class="archivos">
+    <label class="boton boton-archivo">
+      <input type="file" id="input-mp3" accept="audio/*,.mp3" hidden>
+      <span>Elegir mp3</span>
+      <small id="nombre-mp3">Ningún archivo</small>
+    </label>
+    <label class="boton boton-archivo">
+      <input type="file" id="input-json" accept=".json,application/json" hidden>
+      <span>Elegir acordes</span>
+      <small id="nombre-json">Ningún archivo</small>
+    </label>
+  </header>
+
+  <!-- 3. Acorde actual (grande) y el que viene (chico) -->
+  <section class="pantalla">
+    <p id="titulo" class="titulo">Elegí el mp3 y su JSON</p>
+    <div id="acorde-actual" class="acorde-actual">–</div>
+    <div class="siguiente">
+      Sigue: <strong id="acorde-siguiente">–</strong>
+      <span id="cuenta-regresiva"></span>
+    </div>
+  </section>
+
+  <!-- 2. Reproductor -->
+  <!-- El <audio> no se ve: lo manejamos con nuestros propios controles grandes. -->
+  <audio id="audio" preload="auto"></audio>
+  <section class="reproductor">
+    <button id="boton-play" class="boton boton-play" disabled aria-label="Reproducir">▶</button>
+    <div class="barra">
+      <input type="range" id="barra-tiempo" min="0" max="0" step="0.1" value="0" disabled>
+      <div class="tiempos">
+        <span id="tiempo-actual">0:00</span>
+        <span id="tiempo-total">0:00</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Ajuste de sincronización -->
+  <section class="ajuste">
+    <button id="boton-antes" class="boton">− 0.1 s</button>
+    <div class="ajuste-valor">
+      <span id="valor-ajuste">0.0 s</span>
+      <small>ajuste</small>
+    </div>
+    <button id="boton-despues" class="boton">+ 0.1 s</button>
+  </section>
+
+  <!-- 4. Lista de todos los acordes -->
+  <ul id="lista" class="lista"></ul>
+
+  <script src="app.js"></script>
+</body>
+</html>

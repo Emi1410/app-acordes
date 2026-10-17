@@ -1,0 +1,243 @@
+/* ------------------------------------------------------------------
+   Colores y medidas generales (se cambian en un solo lugar)
+   ------------------------------------------------------------------ */
+:root {
+  --fondo: #111418;
+  --superficie: #1d2228;
+  --borde: #2e353d;
+  --texto: #f2f4f6;
+  --texto-suave: #9aa4ae;
+  --acento: #f5b83d;          /* amarillo: acorde actual y botones principales */
+  --acento-texto: #1a1300;
+  --alto-boton: 56px;         /* botones grandes, fáciles de tocar con el dedo */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* La página ocupa exactamente el alto de la pantalla (dvh = alto visible real
+   en el celular). Así la única parte que se desplaza es la lista de acordes. */
+html, body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Evita que Android resalte en azul cada cosa que se toca */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ------------------------------------------------------------------
+   Botones
+   ------------------------------------------------------------------ */
+.boton {
+  min-height: var(--alto-boton);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.boton:active {
+  transform: scale(0.97);
+}
+
+.boton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------------
+   1. Selección de archivos: dos botones lado a lado
+   ------------------------------------------------------------------ */
+.archivos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.boton-archivo {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 8px;
+  text-align: center;
+}
+
+/* Nombre del archivo elegido, cortado con "..." si es muy largo */
+.boton-archivo small {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--texto-suave);
+}
+
+/* ------------------------------------------------------------------
+   3. Acorde actual y siguiente
+   ------------------------------------------------------------------ */
+.pantalla {
+  text-align: center;
+}
+
+.titulo {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--texto-suave);
+}
+
+.acorde-actual {
+  /* Tamaño que se adapta al ancho del celular, con mínimo y máximo */
+  font-size: clamp(5rem, 30vw, 10rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--acento);
+}
+
+.siguiente {
+  font-size: 1.6rem;
+  color: var(--texto-suave);
+}
+
+.siguiente strong {
+  color: var(--texto);
+}
+
+#cuenta-regresiva {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------
+   2. Reproductor: botón redondo + barra de tiempo
+   ------------------------------------------------------------------ */
+.reproductor {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.boton-play {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  background: var(--acento);
+  color: var(--acento-texto);
+  font-size: 1.8rem;
+}
+
+.barra {
+  flex: 1;
+}
+
+.barra input {
+  width: 100%;
+  height: 32px;           /* zona táctil más alta que la barra dibujada */
+  accent-color: var(--acento);
+}
+
+.tiempos {
+  display: flex;
+  justify-content: space-between;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------
+   5. Ajuste de sincronización
+   ------------------------------------------------------------------ */
+.ajuste {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.ajuste-valor {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ajuste-valor small {
+  font-size: 0.8rem;
+  color: var(--texto-suave);
+}
+
+/* ------------------------------------------------------------------
+   4. Lista de acordes: grilla de "fichas" que ocupa el resto de la pantalla
+   ------------------------------------------------------------------ */
+.lista {
+  flex: 1;
+  min-height: 0;           /* necesario para que pueda achicarse y desplazarse */
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  grid-auto-rows: min-content;
+  gap: 8px;
+}
+
+.lista li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--alto-boton);
+  border-radius: 12px;
+  background: var(--superficie);
+  cursor: pointer;
+  user-select: none;
+}
+
+.lista li b {
+  font-size: 1.3rem;
+}
+
+.lista li small {
+  font-size: 0.75rem;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Acordes que ya pasaron: más apagados */
+.lista li.pasado {
+  opacity: 0.45;
+}
+
+/* Acorde que está sonando */
+.lista li.actual {
+  background: var(--acento);
+  color: var(--acento-texto);
+  opacity: 1;
+}
+
+.lista li.actual small {
+  color: var(--acento-texto);
+}

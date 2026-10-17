@@ -1,0 +1,501 @@
+{
+  "cancion": "Prueba",
+  "tempo": 117.5,
+  "acordes": [
+    {
+      "inicio": 0.0,
+      "fin": 0.67,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 0.67,
+      "fin": 4.71,
+      "acorde": "E"
+    },
+    {
+      "inicio": 4.71,
+      "fin": 11.19,
+      "acorde": "C#"
+    },
+    {
+      "inicio": 11.19,
+      "fin": 13.19,
+      "acorde": "A"
+    },
+    {
+      "inicio": 13.19,
+      "fin": 15.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 15.19,
+      "fin": 16.7,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 16.7,
+      "fin": 19.2,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 19.2,
+      "fin": 21.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 21.2,
+      "fin": 23.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 23.2,
+      "fin": 27.19,
+      "acorde": "B"
+    },
+    {
+      "inicio": 27.19,
+      "fin": 29.19,
+      "acorde": "A"
+    },
+    {
+      "inicio": 29.19,
+      "fin": 31.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 31.21,
+      "fin": 34.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 34.71,
+      "fin": 37.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 37.2,
+      "fin": 40.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 40.19,
+      "fin": 42.7,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 42.7,
+      "fin": 45.21,
+      "acorde": "A"
+    },
+    {
+      "inicio": 45.21,
+      "fin": 47.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 47.21,
+      "fin": 48.2,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 48.2,
+      "fin": 50.71,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 50.71,
+      "fin": 52.71,
+      "acorde": "A"
+    },
+    {
+      "inicio": 52.71,
+      "fin": 55.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 55.19,
+      "fin": 59.19,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 59.19,
+      "fin": 61.23,
+      "acorde": "A"
+    },
+    {
+      "inicio": 61.23,
+      "fin": 63.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 63.2,
+      "fin": 64.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 64.71,
+      "fin": 67.2,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 67.2,
+      "fin": 69.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 69.2,
+      "fin": 72.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 72.19,
+      "fin": 75.19,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 75.19,
+      "fin": 77.18,
+      "acorde": "A"
+    },
+    {
+      "inicio": 77.18,
+      "fin": 79.18,
+      "acorde": "E"
+    },
+    {
+      "inicio": 79.18,
+      "fin": 80.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 80.71,
+      "fin": 83.2,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 83.2,
+      "fin": 84.71,
+      "acorde": "A"
+    },
+    {
+      "inicio": 84.71,
+      "fin": 87.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 87.21,
+      "fin": 91.21,
+      "acorde": "B"
+    },
+    {
+      "inicio": 91.21,
+      "fin": 94.18,
+      "acorde": "A"
+    },
+    {
+      "inicio": 94.18,
+      "fin": 95.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 95.2,
+      "fin": 96.2,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 96.2,
+      "fin": 98.73,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 98.73,
+      "fin": 101.22,
+      "acorde": "A"
+    },
+    {
+      "inicio": 101.22,
+      "fin": 104.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 104.21,
+      "fin": 107.18,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 107.18,
+      "fin": 109.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 109.2,
+      "fin": 112.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 112.2,
+      "fin": 115.22,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 115.22,
+      "fin": 117.21,
+      "acorde": "A"
+    },
+    {
+      "inicio": 117.21,
+      "fin": 119.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 119.19,
+      "fin": 123.18,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 123.18,
+      "fin": 125.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 125.2,
+      "fin": 127.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 127.2,
+      "fin": 128.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 128.71,
+      "fin": 131.19,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 131.19,
+      "fin": 133.21,
+      "acorde": "A"
+    },
+    {
+      "inicio": 133.21,
+      "fin": 136.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 136.21,
+      "fin": 139.18,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 139.18,
+      "fin": 141.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 141.2,
+      "fin": 143.17,
+      "acorde": "E"
+    },
+    {
+      "inicio": 143.17,
+      "fin": 144.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 144.71,
+      "fin": 147.19,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 147.19,
+      "fin": 149.19,
+      "acorde": "A"
+    },
+    {
+      "inicio": 149.19,
+      "fin": 151.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 151.19,
+      "fin": 154.71,
+      "acorde": "B"
+    },
+    {
+      "inicio": 154.71,
+      "fin": 157.2,
+      "acorde": "A"
+    },
+    {
+      "inicio": 157.2,
+      "fin": 159.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 159.2,
+      "fin": 161.7,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 161.7,
+      "fin": 163.21,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 163.21,
+      "fin": 165.19,
+      "acorde": "A"
+    },
+    {
+      "inicio": 165.19,
+      "fin": 168.69,
+      "acorde": "E"
+    },
+    {
+      "inicio": 168.69,
+      "fin": 171.2,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 171.2,
+      "fin": 172.71,
+      "acorde": "A"
+    },
+    {
+      "inicio": 172.71,
+      "fin": 176.7,
+      "acorde": "E"
+    },
+    {
+      "inicio": 176.7,
+      "fin": 179.21,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 179.21,
+      "fin": 180.7,
+      "acorde": "A"
+    },
+    {
+      "inicio": 180.7,
+      "fin": 182.21,
+      "acorde": "E"
+    },
+    {
+      "inicio": 182.21,
+      "fin": 184.16,
+      "acorde": "B"
+    },
+    {
+      "inicio": 184.16,
+      "fin": 187.2,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 187.2,
+      "fin": 189.22,
+      "acorde": "A"
+    },
+    {
+      "inicio": 189.22,
+      "fin": 191.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 191.19,
+      "fin": 192.73,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 192.73,
+      "fin": 195.16,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 195.16,
+      "fin": 197.21,
+      "acorde": "A"
+    },
+    {
+      "inicio": 197.21,
+      "fin": 200.18,
+      "acorde": "E"
+    },
+    {
+      "inicio": 200.18,
+      "fin": 203.17,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 203.17,
+      "fin": 205.19,
+      "acorde": "A"
+    },
+    {
+      "inicio": 205.19,
+      "fin": 207.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 207.19,
+      "fin": 208.7,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 208.7,
+      "fin": 211.21,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 211.21,
+      "fin": 213.21,
+      "acorde": "A"
+    },
+    {
+      "inicio": 213.21,
+      "fin": 215.2,
+      "acorde": "E"
+    },
+    {
+      "inicio": 215.2,
+      "fin": 216.71,
+      "acorde": "G#"
+    },
+    {
+      "inicio": 216.71,
+      "fin": 219.2,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 219.2,
+      "fin": 221.22,
+      "acorde": "A"
+    },
+    {
+      "inicio": 221.22,
+      "fin": 223.19,
+      "acorde": "E"
+    },
+    {
+      "inicio": 223.19,
+      "fin": 227.18,
+      "acorde": "B"
+    },
+    {
+      "inicio": 227.18,
+      "fin": 237.31,
+      "acorde": "C#m"
+    },
+    {
+      "inicio": 237.31,
+      "fin": 238.91,
+      "acorde": "C#"
+    },
+    {
+      "inicio": 238.91,
+      "fin": 245.04,
+      "acorde": "C#m"
+    }
+  ]
+}
