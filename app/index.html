@@ -7,76 +7,124 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.2">
+  <link rel="stylesheet" href="style.css?v=1.3">
 </head>
 <body>
 
-  <!-- 1. Selección de archivos -->
-  <!-- Cada <label> funciona como botón: al tocarlo abre el selector de su <input> oculto. -->
-  <header class="archivos">
-    <label class="boton boton-archivo">
-      <input type="file" id="input-mp3" accept="audio/*,.mp3" hidden>
-      <span>Elegir mp3</span>
-      <small id="nombre-mp3">Ningún archivo</small>
+  <!-- ==============================================================
+       Pantalla 1: biblioteca de canciones guardadas
+       ============================================================== -->
+  <section id="pantalla-biblioteca" class="pantalla-completa">
+    <header class="encabezado">
+      <h1>Mis canciones</h1>
+    </header>
+
+    <button id="boton-agregar" class="boton boton-principal" type="button">+ Agregar canción</button>
+
+    <ul id="lista-canciones" class="lista-canciones"></ul>
+    <p id="biblioteca-vacia" class="aviso" hidden>
+      Todavía no hay canciones guardadas.<br>Tocá “Agregar canción” para elegir un mp3 y su JSON.
+    </p>
+
+    <!-- Espacio que ocupan las canciones guardadas -->
+    <footer id="espacio" class="espacio"></footer>
+  </section>
+
+  <!-- ==============================================================
+       Pantalla 2: agregar una canción
+       ============================================================== -->
+  <section id="pantalla-agregar" class="pantalla-completa" hidden>
+    <header class="encabezado">
+      <button id="boton-cancelar" class="boton boton-volver" type="button" aria-label="Volver a la biblioteca">←</button>
+      <h1>Agregar canción</h1>
+    </header>
+
+    <!-- Cada <label> funciona como botón: al tocarlo abre el selector de su <input> oculto. -->
+    <div class="archivos">
+      <label class="boton boton-archivo">
+        <input type="file" id="input-mp3" accept="audio/*,.mp3" hidden>
+        <span>Elegir mp3</span>
+        <small id="nombre-mp3">Ningún archivo</small>
+      </label>
+      <label class="boton boton-archivo">
+        <input type="file" id="input-json" accept=".json,application/json" hidden>
+        <span>Elegir acordes</span>
+        <small id="nombre-json">Ningún archivo</small>
+      </label>
+    </div>
+
+    <label class="campo">
+      Nombre de la canción
+      <input type="text" id="input-nombre" maxlength="120" autocomplete="off"
+             placeholder="Se completa con el del JSON">
     </label>
-    <label class="boton boton-archivo">
-      <input type="file" id="input-json" accept=".json,application/json" hidden>
-      <span>Elegir acordes</span>
-      <small id="nombre-json">Ningún archivo</small>
-    </label>
-  </header>
 
-  <!-- 3. Acorde actual (grande) y el que viene (chico) -->
-  <section class="pantalla">
-    <p id="titulo" class="titulo">Elegí el mp3 y su JSON</p>
-    <div id="acorde-actual" class="acorde-actual">–</div>
+    <!-- Avisos de error (JSON con formato incorrecto, sin espacio, etc.) -->
+    <p id="aviso-agregar" class="aviso-error" role="alert" hidden></p>
 
-    <!-- Diagrama del acorde actual. Es un botón: al tocarlo cambia de posición. -->
-    <button id="diagrama-actual" class="diagrama-actual" type="button"
-            aria-label="Cambiar la posición del acorde" hidden></button>
-
-    <div class="siguiente">
-      <div>
-        Sigue: <strong id="acorde-siguiente">–</strong>
-        <div id="cuenta-regresiva"></div>
-      </div>
-      <!-- Diagrama chico del próximo acorde -->
-      <div id="diagrama-siguiente" class="diagrama-siguiente"></div>
-    </div>
+    <button id="boton-guardar" class="boton boton-principal" type="button" disabled>Guardar canción</button>
   </section>
 
-  <!-- 2. Reproductor -->
-  <!-- El <audio> no se ve: lo manejamos con nuestros propios controles grandes. -->
-  <audio id="audio" preload="auto"></audio>
-  <section class="reproductor">
-    <button id="boton-play" class="boton boton-play" disabled aria-label="Reproducir">▶</button>
-    <div class="barra">
-      <input type="range" id="barra-tiempo" min="0" max="0" step="0.1" value="0" disabled>
-      <div class="tiempos">
-        <span id="tiempo-actual">0:00</span>
-        <span id="tiempo-total">0:00</span>
+  <!-- ==============================================================
+       Pantalla 3: reproductor con los acordes
+       ============================================================== -->
+  <section id="pantalla-reproductor" class="pantalla-completa" hidden>
+    <header class="encabezado">
+      <button id="boton-volver" class="boton boton-volver" type="button" aria-label="Volver a la biblioteca">←</button>
+      <p id="titulo" class="titulo"></p>
+    </header>
+
+    <!-- Acorde actual (grande), su diagrama, y el que viene (chico) -->
+    <div class="pantalla">
+      <div id="acorde-actual" class="acorde-actual">–</div>
+
+      <!-- Diagrama del acorde actual. Es un botón: al tocarlo cambia de posición. -->
+      <button id="diagrama-actual" class="diagrama-actual" type="button"
+              aria-label="Cambiar la posición del acorde" hidden></button>
+
+      <div class="siguiente">
+        <div>
+          Sigue: <strong id="acorde-siguiente">–</strong>
+          <div id="cuenta-regresiva"></div>
+        </div>
+        <!-- Diagrama chico del próximo acorde -->
+        <div id="diagrama-siguiente" class="diagrama-siguiente"></div>
       </div>
     </div>
-  </section>
 
-  <!-- 5. Ajuste de sincronización -->
-  <section class="ajuste">
-    <button id="boton-antes" class="boton">− 0.1 s</button>
-    <div class="ajuste-valor">
-      <span id="valor-ajuste">0.0 s</span>
-      <small>ajuste</small>
+    <!-- El <audio> no se ve: lo manejamos con nuestros propios controles grandes. -->
+    <audio id="audio" preload="auto"></audio>
+    <div class="reproductor">
+      <button id="boton-play" class="boton boton-play" type="button" aria-label="Reproducir">▶</button>
+      <div class="barra">
+        <input type="range" id="barra-tiempo" min="0" max="0" step="0.1" value="0">
+        <div class="tiempos">
+          <span id="tiempo-actual">0:00</span>
+          <span id="tiempo-total">0:00</span>
+        </div>
+      </div>
     </div>
-    <button id="boton-despues" class="boton">+ 0.1 s</button>
+
+    <!-- Ajuste de sincronización (se guarda por canción) -->
+    <div class="ajuste">
+      <button id="boton-antes" class="boton" type="button">− 0.1 s</button>
+      <div class="ajuste-valor">
+        <span id="valor-ajuste">0.0 s</span>
+        <small>ajuste</small>
+      </div>
+      <button id="boton-despues" class="boton" type="button">+ 0.1 s</button>
+    </div>
+
+    <!-- Lista de todos los acordes -->
+    <ul id="lista" class="lista"></ul>
   </section>
 
-  <!-- 4. Lista de todos los acordes -->
-  <ul id="lista" class="lista"></ul>
-
-  <!-- El orden importa: app.js usa funciones de los otros dos archivos.
+  <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.2"></script>
-  <script src="diagrama.js?v=1.2"></script>
-  <script src="app.js?v=1.2"></script>
+  <script src="acordes.js?v=1.3"></script>
+  <script src="diagrama.js?v=1.3"></script>
+  <script src="biblioteca.js?v=1.3"></script>
+  <script src="app.js?v=1.3"></script>
 </body>
 </html>

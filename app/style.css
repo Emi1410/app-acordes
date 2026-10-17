@@ -36,6 +36,173 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Lo que tiene el atributo "hidden" no se ve nunca, aunque otra regla
+   le ponga display: flex o grid. */
+[hidden] {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------------
+   Pantallas (biblioteca, agregar, reproductor): ocupan todo el alto
+   ------------------------------------------------------------------ */
+.pantalla-completa {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Barra de arriba: botón "←" (si hay) y título */
+.encabezado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.encabezado h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.encabezado .titulo {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.boton-volver {
+  flex: none;
+  width: var(--alto-boton);
+  min-height: 48px;
+  height: 48px;
+  font-size: 1.4rem;
+}
+
+/* Botón amarillo para la acción principal de cada pantalla */
+.boton-principal {
+  border: none;
+  background: var(--acento);
+  color: var(--acento-texto);
+}
+
+/* ------------------------------------------------------------------
+   Biblioteca: lista de canciones
+   ------------------------------------------------------------------ */
+.lista-canciones {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cancion {
+  display: flex;
+  gap: 8px;
+}
+
+/* Botón grande con nombre y detalle (tonalidad · BPM) */
+.cancion-abrir {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cancion-abrir b {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 1.15rem;
+}
+
+.cancion-abrir small {
+  color: var(--texto-suave);
+}
+
+.cancion-borrar {
+  flex: none;
+  width: var(--alto-boton);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.cancion-abrir:active,
+.cancion-borrar:active {
+  transform: scale(0.97);
+}
+
+.aviso {
+  margin: 24px 0;
+  text-align: center;
+  line-height: 1.5;
+  color: var(--texto-suave);
+}
+
+/* Pie con el espacio ocupado */
+.espacio {
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--texto-suave);
+}
+
+/* ------------------------------------------------------------------
+   Agregar canción
+   ------------------------------------------------------------------ */
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--texto-suave);
+}
+
+.campo input {
+  min-height: var(--alto-boton);
+  padding: 0 14px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.campo input:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+.aviso-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #3a1d1d;
+  color: #ffb4b4;
+  line-height: 1.4;
+}
+
 /* ------------------------------------------------------------------
    Botones
    ------------------------------------------------------------------ */
