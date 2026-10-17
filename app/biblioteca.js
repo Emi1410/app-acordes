@@ -6,16 +6,27 @@
    IndexedDB es una base de datos que trae el navegador. A diferencia de
    localStorage, puede guardar archivos grandes como los mp3.
 
-   Usamos dos "almacenes" (como dos tablas):
+   Usamos tres "almacenes" (como tres tablas):
      - "canciones": los datos de cada canción (nombre, tonalidad, tempo,
        acordes, ajuste de sincronización, tamaño). Es liviano.
      - "audios":    el mp3 de cada canción, con el mismo id.
-   Separarlos permite mostrar la lista y guardar el ajuste sin tener que
-   leer ni reescribir los mp3, que pesan varios MB.
+     - "listas":    las listas de canciones. Cada una guarda su nombre y
+       los ids de sus canciones EN ORDEN (la primera es la de arriba).
+       Una canción puede estar en varias listas: solo se repite su id,
+       el mp3 se guarda una sola vez.
+   Separar canciones y audios permite mostrar la lista y guardar el ajuste
+   sin tener que leer ni reescribir los mp3, que pesan varios MB.
    ================================================================== */
 
 const NOMBRE_BASE = "app-acordes";
-const VERSION_BASE = 1;
+
+// Versión de la ESTRUCTURA de la base (no de la app). Historial:
+//   1: almacenes "canciones" y "audios".
+//   2: se agrega el almacén "listas".
+// Al subirla, el navegador ejecuta onupgradeneeded en los celulares que
+// tenían una versión anterior. Ahí solo se AGREGA lo nuevo: nunca se
+// borran ni se tocan los almacenes que ya existen, así no se pierde nada.
+const VERSION_BASE = 2;
 
 // Abrimos la base una sola vez y reutilizamos la conexión.
 let promesaBase = null;
@@ -25,17 +36,52 @@ function abrirBase() {
     promesaBase = new Promise((resolver, rechazar) => {
       const pedido = indexedDB.open(NOMBRE_BASE, VERSION_BASE);
 
-      // Se ejecuta solo la primera vez (o al subir VERSION_BASE): crea los almacenes.
-      pedido.onupgradeneeded = () => {
+      // Se ejecuta la primera vez (versión 0) o cuando la base guardada es
+      // más vieja que VERSION_BASE. "oldVersion" dice desde cuál venimos y
+      // cada paso agrega solo lo que falta.
+      pedido.onupgradeneeded = (evento) => {
         const base = pedido.result;
-        base.createObjectStore("canciones", { keyPath: "id", autoIncrement: true });
-        base.createObjectStore("audios", { keyPath: "id" });
+        if (evento.oldVersion < 1) {
+          base.createObjectStore("canciones", { keyPath: "id", autoIncrement: true });
+          base.createObjectStore("audios", { keyPath: "id" });
+        }
+        if (evento.oldVersion < 2) {
+          base.createObjectStore("listas", { keyPath: "id", autoIncrement: true });
+        }
       };
-      pedido.onsuccess = () => resolver(pedido.result);
-      pedido.onerror = () => rechazar(pedido.error);
+      pedido.onsuccess = () => {
+        const base = pedido.result;
+        // Si en el futuro otra pestaña con una versión más nueva necesita
+        // actualizar la base, cerramos esta conexión para no trabarla.
+        base.onversionchange = () => base.close();
+        resolver(base);
+      };
+      pedido.onerror = () => {
+        promesaBase = null;   // así se puede reintentar
+        rechazar(pedido.error);
+      };
+      // La actualización espera a que se cierren otras pestañas con la app vieja.
+      pedido.onblocked = () => {
+        promesaBase = null;
+        rechazar(new Error("Cerrá las otras pestañas de la app y volvé a abrirla para terminar de actualizarla."));
+      };
     });
   }
   return promesaBase;
+}
+
+/**
+ * Pasa un texto a una forma "comparable": sin tildes, en minúsculas y con
+ * un solo espacio entre palabras. "  Cómo  UN Diamante" -> "como un diamante".
+ * Se usa para buscar canciones y para reconocer listas con el mismo nombre.
+ */
+function normalizarTexto(texto) {
+  return String(texto)
+    .normalize("NFD")                    // separa cada letra de su tilde
+    .replace(/[̀-ͯ]/g, "")     // y borra las tildes
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -58,13 +104,19 @@ async function transaccion(almacenes, modo, trabajo) {
   });
 }
 
-/** Guarda una canción nueva con su mp3. Devuelve el id que le asignó la base. */
-function guardarCancion(datos, mp3) {
-  return transaccion(["canciones", "audios"], "readwrite", (tx) => {
+/**
+ * Guarda una canción nueva con su mp3. Si se indica "nombreLista", la
+ * agrega también a esa lista (creándola si no existe). Todo en una sola
+ * transacción: o se guarda completo o no se guarda nada.
+ * Devuelve el id que le asignó la base.
+ */
+function guardarCancion(datos, mp3, nombreLista = "") {
+  return transaccion(["canciones", "audios", "listas"], "readwrite", (tx) => {
     const pedido = tx.objectStore("canciones").add(datos);
     // Cuando la base le da un id a la canción, guardamos el mp3 con ese mismo id.
     pedido.addEventListener("success", () => {
       tx.objectStore("audios").put({ id: pedido.result, mp3 });
+      if (nombreLista.trim()) ponerPrimeraEnLista(tx, nombreLista, pedido.result);
     });
     return pedido;
   });
@@ -88,11 +140,103 @@ async function obtenerAudio(id) {
   return registro ? registro.mp3 : null;
 }
 
-/** Borra la canción y su mp3 juntos. */
+/** Borra la canción y su mp3 juntos, y la saca de todas las listas. */
 function borrarCancion(id) {
-  return transaccion(["canciones", "audios"], "readwrite", (tx) => {
+  return transaccion(["canciones", "audios", "listas"], "readwrite", (tx) => {
     tx.objectStore("canciones").delete(id);
     tx.objectStore("audios").delete(id);
+    const listas = tx.objectStore("listas");
+    const pedido = listas.getAll();
+    pedido.addEventListener("success", () => {
+      for (const lista of pedido.result) {
+        if (lista.canciones.includes(id)) {
+          listas.put({ ...lista, canciones: lista.canciones.filter((c) => c !== id) });
+        }
+      }
+    });
+  });
+}
+
+/* ==================================================================
+   Listas de canciones
+
+   Cada lista es { id, nombre, canciones: [id1, id2, ...] }. El array
+   "canciones" guarda el ORDEN: la posición 0 es la de arriba. Ese orden
+   sirve para mostrarla y, más adelante, para pasar a la siguiente canción.
+   Dos listas no pueden llamarse igual (sin contar mayúsculas ni tildes):
+   "favoritos" y "Favoritos" son la misma lista.
+   ================================================================== */
+
+/** Todas las listas, ordenadas por nombre. */
+async function listarListas() {
+  const listas = await transaccion(["listas"], "readonly", (tx) => tx.objectStore("listas").getAll());
+  return listas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+/**
+ * Dentro de una transacción abierta: busca la lista por nombre y pone la
+ * canción en la primera posición (si ya estaba, la sube arriba de todo).
+ * Si la lista no existe, la crea con esa canción.
+ */
+function ponerPrimeraEnLista(tx, nombreLista, idCancion) {
+  const almacen = tx.objectStore("listas");
+  const nombre = nombreLista.replace(/\s+/g, " ").trim();
+  const pedido = almacen.getAll();
+  pedido.addEventListener("success", () => {
+    const existente = pedido.result.find((l) => normalizarTexto(l.nombre) === normalizarTexto(nombre));
+    if (existente) {
+      const resto = existente.canciones.filter((c) => c !== idCancion);
+      almacen.put({ ...existente, canciones: [idCancion, ...resto] });
+    } else {
+      almacen.add({ nombre, canciones: [idCancion] });
+    }
+  });
+}
+
+/** Agrega una canción ya guardada a una lista (la crea si no existe). */
+function agregarALista(nombreLista, idCancion) {
+  return transaccion(["listas"], "readwrite", (tx) => {
+    ponerPrimeraEnLista(tx, nombreLista, idCancion);
+  });
+}
+
+/** Saca una canción de una lista. La canción sigue en la biblioteca. */
+function sacarDeLista(idLista, idCancion) {
+  return transaccion(["listas"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("listas");
+    const pedido = almacen.get(idLista);
+    pedido.addEventListener("success", () => {
+      const lista = pedido.result;
+      if (lista) almacen.put({ ...lista, canciones: lista.canciones.filter((c) => c !== idCancion) });
+    });
+  });
+}
+
+/**
+ * Cambia el nombre de una lista. Si ya hay OTRA lista con ese nombre,
+ * no cambia nada y avisa con un error.
+ */
+async function renombrarLista(idLista, nuevoNombre) {
+  const nombre = nuevoNombre.replace(/\s+/g, " ").trim();
+  if (!nombre) throw new Error("El nombre de la lista no puede quedar vacío.");
+  let repetido = false;
+  await transaccion(["listas"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("listas");
+    const pedido = almacen.getAll();
+    pedido.addEventListener("success", () => {
+      repetido = pedido.result.some((l) => l.id !== idLista
+        && normalizarTexto(l.nombre) === normalizarTexto(nombre));
+      const lista = pedido.result.find((l) => l.id === idLista);
+      if (!repetido && lista) almacen.put({ ...lista, nombre });
+    });
+  });
+  if (repetido) throw new Error(`Ya hay una lista que se llama "${nombre}".`);
+}
+
+/** Borra una lista. Sus canciones siguen en la biblioteca. */
+function borrarLista(idLista) {
+  return transaccion(["listas"], "readwrite", (tx) => {
+    tx.objectStore("listas").delete(idLista);
   });
 }
 

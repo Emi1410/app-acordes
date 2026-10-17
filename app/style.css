@@ -90,16 +90,174 @@ body {
 /* ------------------------------------------------------------------
    Biblioteca: lista de canciones
    ------------------------------------------------------------------ */
-.lista-canciones {
+/* Buscador arriba de todo */
+.buscador {
+  min-height: var(--alto-boton);
+  padding: 0 16px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.buscador:focus {
+  outline: 2px solid var(--acento);
+  outline-offset: 1px;
+}
+
+/* Parte de la biblioteca que se desplaza (resultados o secciones) */
+.contenido-biblioteca {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lista-canciones {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Secciones desplegables: una por lista y "Todas las canciones" */
+.secciones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seccion {
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+  padding: 0 10px;
+}
+
+.seccion[open] {
+  padding-bottom: 10px;
+}
+
+/* Título de la sección: nombre a la izquierda, cantidad y flecha a la derecha */
+.seccion summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--alto-boton);
+  font-size: 1.15rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;       /* sacamos el triángulo de fábrica... */
+  user-select: none;
+}
+
+.seccion summary::-webkit-details-marker {
+  display: none;
+}
+
+.seccion summary span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.seccion summary small {
+  color: var(--texto-suave);
+  font-weight: 400;
+}
+
+/* ...y dibujamos una flecha propia que gira al abrir */
+.seccion summary::after {
+  content: "›";
+  color: var(--texto-suave);
+  font-size: 1.5rem;
+  line-height: 1;
+  transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+
+.seccion[open] summary::after {
+  transform: rotate(-90deg);
+}
+
+.seccion-acciones {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* Botón de texto más bajito (Renombrar, Borrar lista, + Lista) */
+.boton-chico {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.95rem;
+}
+
+.encabezado .boton-chico {
+  flex: none;
+  min-height: 48px;
+}
+
+.aviso-chico {
+  margin: 4px 0 10px;
+}
+
+/* Ventana "Agregar a lista" */
+.dialogo {
+  width: calc(100% - 32px);
+  max-width: 400px;
+  padding: 20px;
+  border: 1px solid var(--borde);
+  border-radius: 18px;
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.dialogo::backdrop {
+  background: rgba(10, 12, 15, 0.8);
+}
+
+.dialogo form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialogo h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.dialogo .campo input {
+  background: var(--fondo);
+}
+
+.dialogo-botones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Aviso corto abajo de la pantalla */
+.mensaje {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 20;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--texto);
+  color: var(--fondo);
+  font-weight: 600;
+  text-align: center;
 }
 
 .cancion {

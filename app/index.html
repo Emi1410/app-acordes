@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.5">
+  <link rel="stylesheet" href="style.css?v=1.6">
 </head>
 <body>
 
@@ -15,16 +15,21 @@
        Pantalla 1: biblioteca de canciones guardadas
        ============================================================== -->
   <section id="pantalla-biblioteca" class="pantalla-completa">
-    <header class="encabezado">
-      <h1>Mis canciones</h1>
-    </header>
+    <!-- Buscador: filtra todas las canciones mientras se escribe -->
+    <input type="search" id="buscador" class="buscador" placeholder="Buscar canción"
+           aria-label="Buscar canción" autocomplete="off" enterkeyhint="search">
 
     <button id="boton-agregar" class="boton boton-principal" type="button">+ Agregar canción</button>
 
-    <ul id="lista-canciones" class="lista-canciones"></ul>
-    <p id="biblioteca-vacia" class="aviso" hidden>
-      Todavía no hay canciones guardadas.<br>Tocá “Agregar canción” para elegir un mp3 y su JSON.
-    </p>
+    <!-- Parte que se desplaza: resultados de búsqueda, o las listas + "Todas las canciones" -->
+    <div class="contenido-biblioteca">
+      <ul id="resultados-busqueda" class="lista-canciones" hidden></ul>
+      <p id="sin-resultados" class="aviso" hidden></p>
+      <div id="secciones" class="secciones"></div>
+      <p id="biblioteca-vacia" class="aviso" hidden>
+        Todavía no hay canciones guardadas.<br>Tocá “Agregar canción” para elegir un mp3.
+      </p>
+    </div>
 
     <!-- Espacio que ocupan las canciones guardadas -->
     <footer id="espacio" class="espacio"></footer>
@@ -63,6 +68,13 @@
              placeholder="Se completa con el del JSON">
     </label>
 
+    <!-- "list" conecta el campo con las sugerencias de listas existentes -->
+    <label class="campo">
+      Lista (opcional)
+      <input type="text" id="input-lista" maxlength="60" autocomplete="off"
+             list="sugerencias-listas" placeholder="Por ejemplo: Favoritos">
+    </label>
+
     <!-- Avisos de error (JSON con formato incorrecto, sin espacio, etc.) -->
     <p id="aviso-agregar" class="aviso-error" role="alert" hidden></p>
 
@@ -76,6 +88,7 @@
     <header class="encabezado">
       <button id="boton-volver" class="boton boton-volver" type="button" aria-label="Volver a la biblioteca">←</button>
       <p id="titulo" class="titulo"></p>
+      <button id="boton-agregar-lista" class="boton boton-chico" type="button">+ Lista</button>
       <button id="boton-reanalizar" class="boton boton-volver" type="button"
               aria-label="Volver a analizar la canción" title="Volver a analizar">↻</button>
     </header>
@@ -136,13 +149,38 @@
     </div>
   </div>
 
+  <!-- ==============================================================
+       Ventana "Agregar a lista" (desde el reproductor)
+       ============================================================== -->
+  <dialog id="dialogo-lista" class="dialogo">
+    <form id="form-lista" method="dialog">
+      <h2>Agregar a lista</h2>
+      <p id="listas-de-cancion" class="ayuda"></p>
+      <label class="campo">
+        Nombre de la lista
+        <input type="text" id="input-lista-dialogo" maxlength="60" autocomplete="off"
+               list="sugerencias-listas" placeholder="Nueva o existente" required>
+      </label>
+      <div class="dialogo-botones">
+        <button id="boton-cerrar-dialogo" class="boton" type="button">Cancelar</button>
+        <button class="boton boton-principal" type="submit">Agregar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Sugerencias con los nombres de las listas existentes (las usan los dos campos de lista) -->
+  <datalist id="sugerencias-listas"></datalist>
+
+  <!-- Aviso corto que aparece abajo unos segundos ("Agregada a Favoritos") -->
+  <div id="mensaje" class="mensaje" role="status" aria-live="polite" hidden></div>
+
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.5"></script>
-  <script src="diagrama.js?v=1.5"></script>
-  <script src="biblioteca.js?v=1.5"></script>
-  <script src="analizador.js?v=1.5"></script>
-  <script src="app.js?v=1.5"></script>
+  <script src="acordes.js?v=1.6"></script>
+  <script src="diagrama.js?v=1.6"></script>
+  <script src="biblioteca.js?v=1.6"></script>
+  <script src="analizador.js?v=1.6"></script>
+  <script src="app.js?v=1.6"></script>
 </body>
 </html>

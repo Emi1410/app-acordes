@@ -12,10 +12,23 @@ const pantallas = {
 };
 
 // Biblioteca
+const buscador = document.getElementById("buscador");
 const botonAgregar = document.getElementById("boton-agregar");
-const listaCanciones = document.getElementById("lista-canciones");
+const resultadosBusqueda = document.getElementById("resultados-busqueda");
+const sinResultados = document.getElementById("sin-resultados");
+const secciones = document.getElementById("secciones");
 const bibliotecaVacia = document.getElementById("biblioteca-vacia");
 const espacio = document.getElementById("espacio");
+const sugerenciasListas = document.getElementById("sugerencias-listas");
+const mensaje = document.getElementById("mensaje");
+
+// Ventana "Agregar a lista"
+const botonAgregarLista = document.getElementById("boton-agregar-lista");
+const dialogoLista = document.getElementById("dialogo-lista");
+const formLista = document.getElementById("form-lista");
+const listasDeCancion = document.getElementById("listas-de-cancion");
+const inputListaDialogo = document.getElementById("input-lista-dialogo");
+const botonCerrarDialogo = document.getElementById("boton-cerrar-dialogo");
 
 // Agregar canción
 const botonCancelar = document.getElementById("boton-cancelar");
@@ -24,6 +37,7 @@ const inputJson = document.getElementById("input-json");
 const nombreMp3 = document.getElementById("nombre-mp3");
 const nombreJson = document.getElementById("nombre-json");
 const inputNombre = document.getElementById("input-nombre");
+const inputLista = document.getElementById("input-lista");
 const avisoAgregar = document.getElementById("aviso-agregar");
 const botonGuardar = document.getElementById("boton-guardar");
 
@@ -175,12 +189,34 @@ botonCancelar.addEventListener("click", volverABiblioteca);
 // otro orden; con este número solo dibuja el más reciente.
 let dibujoBiblioteca = 0;
 
-// Dibuja la lista de canciones guardadas y el espacio que ocupan.
+// Última copia leída de la base, para que el buscador filtre sin volver a leerla.
+let todasLasCanciones = [];
+let todasLasListas = [];
+
+// Qué secciones desplegables están abiertas ("todas" o "lista-<id>").
+// Se recuerdan para que no se cierren cada vez que se redibuja la pantalla.
+let seccionesAbiertas = new Set(["todas"]);
+try {
+  const guardadas = JSON.parse(localStorage.getItem("seccionesAbiertas"));
+  if (Array.isArray(guardadas)) seccionesAbiertas = new Set(guardadas);
+} catch {
+  // sin localStorage: se usa la opción por defecto
+}
+
+function recordarSecciones() {
+  try {
+    localStorage.setItem("seccionesAbiertas", JSON.stringify([...seccionesAbiertas]));
+  } catch {
+    // no es grave
+  }
+}
+
+// Lee canciones y listas de la base y redibuja la pantalla de inicio.
 async function mostrarBiblioteca() {
   const numero = ++dibujoBiblioteca;
-  let canciones;
+  let canciones, listas;
   try {
-    canciones = await listarCanciones();
+    [canciones, listas] = await Promise.all([listarCanciones(), listarListas()]);
   } catch (error) {
     bibliotecaVacia.hidden = false;
     bibliotecaVacia.textContent = "No pude abrir la biblioteca: " + error.message;
@@ -188,37 +224,252 @@ async function mostrarBiblioteca() {
   }
   if (numero !== dibujoBiblioteca) return;   // ya hay un pedido más nuevo
 
-  listaCanciones.replaceChildren();
-  bibliotecaVacia.hidden = canciones.length > 0;
+  todasLasCanciones = canciones;
+  todasLasListas = listas;
+  actualizarSugerencias();
+  dibujarInicio();
+  mostrarEspacio(canciones, numero);
+}
 
-  for (const cancion of canciones) {
-    // Cada canción: un botón grande para abrirla y uno chico para borrarla.
-    // Usamos textContent (no innerHTML) porque el nombre lo escribe el usuario.
-    const item = document.createElement("li");
-    item.className = "cancion";
+// Elige qué mostrar: los resultados de búsqueda (si hay algo escrito) o las secciones.
+function dibujarInicio() {
+  const buscando = buscador.value.trim() !== "";
+  secciones.hidden = buscando;
+  resultadosBusqueda.hidden = !buscando;
+  sinResultados.hidden = true;
+  bibliotecaVacia.hidden = buscando || todasLasCanciones.length > 0;
+  if (buscando) dibujarResultados();
+  else dibujarSecciones();
+}
 
-    const abrir = document.createElement("button");
-    abrir.type = "button";
-    abrir.className = "cancion-abrir";
-    const nombre = document.createElement("b");
-    nombre.textContent = cancion.nombre;
-    const detalle = document.createElement("small");
-    detalle.textContent = detalleCancion(cancion);
-    abrir.append(nombre, detalle);
-    abrir.addEventListener("click", () => abrirCancion(cancion.id));
+// Las sugerencias que aparecen al escribir el nombre de una lista.
+function actualizarSugerencias() {
+  sugerenciasListas.replaceChildren(...todasLasListas.map((l) => {
+    const opcion = document.createElement("option");
+    opcion.value = l.nombre;
+    return opcion;
+  }));
+}
 
-    const borrar = document.createElement("button");
-    borrar.type = "button";
-    borrar.className = "cancion-borrar";
-    borrar.textContent = "✕";
-    borrar.setAttribute("aria-label", `Borrar ${cancion.nombre}`);
-    borrar.addEventListener("click", () => confirmarBorrado(cancion));
+/**
+ * Crea el <li> de una canción: un botón grande para abrirla (nombre y
+ * detalle) y, si se pide, un botón chico a la derecha (borrar o sacar).
+ * Usamos textContent (no innerHTML) porque los nombres los escribe el usuario.
+ */
+function crearItemCancion(cancion, { detalleExtra = "", accion = null } = {}) {
+  const item = document.createElement("li");
+  item.className = "cancion";
 
-    item.append(abrir, borrar);
-    listaCanciones.appendChild(item);
+  const abrir = document.createElement("button");
+  abrir.type = "button";
+  abrir.className = "cancion-abrir";
+  const nombre = document.createElement("b");
+  nombre.textContent = cancion.nombre;
+  abrir.appendChild(nombre);
+  for (const texto of [detalleCancion(cancion), detalleExtra]) {
+    if (!texto) continue;
+    const linea = document.createElement("small");
+    linea.textContent = texto;
+    abrir.appendChild(linea);
+  }
+  abrir.addEventListener("click", () => abrirCancion(cancion.id));
+  item.appendChild(abrir);
+
+  if (accion) {
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "cancion-borrar";
+    boton.textContent = accion.texto;
+    boton.setAttribute("aria-label", accion.etiqueta);
+    boton.addEventListener("click", accion.alTocar);
+    item.appendChild(boton);
+  }
+  return item;
+}
+
+/**
+ * Crea una sección desplegable (<details>) con un título y un contador.
+ * "clave" identifica la sección para recordar si estaba abierta.
+ */
+function crearSeccion(clave, tituloSeccion, cantidad) {
+  const seccion = document.createElement("details");
+  seccion.className = "seccion";
+  seccion.open = seccionesAbiertas.has(clave);
+  seccion.addEventListener("toggle", () => {
+    if (seccion.open) seccionesAbiertas.add(clave);
+    else seccionesAbiertas.delete(clave);
+    recordarSecciones();
+  });
+
+  const resumen = document.createElement("summary");
+  const nombre = document.createElement("span");
+  nombre.textContent = tituloSeccion;
+  const contador = document.createElement("small");
+  contador.textContent = String(cantidad);
+  resumen.append(nombre, contador);
+  seccion.appendChild(resumen);
+  return seccion;
+}
+
+// Botón chico de texto (para "Renombrar" y "Borrar lista").
+function crearBotonChico(texto, alTocar) {
+  const boton = document.createElement("button");
+  boton.type = "button";
+  boton.className = "boton boton-chico";
+  boton.textContent = texto;
+  boton.addEventListener("click", alTocar);
+  return boton;
+}
+
+// Pantalla de inicio sin búsqueda: una sección por lista y al final "Todas las canciones".
+function dibujarSecciones() {
+  const porId = new Map(todasLasCanciones.map((c) => [c.id, c]));
+  secciones.replaceChildren();
+
+  for (const listaCanc of todasLasListas) {
+    // Solo las canciones que existen, en el orden guardado en la lista.
+    const cancionesLista = listaCanc.canciones.map((id) => porId.get(id)).filter(Boolean);
+    const seccion = crearSeccion(`lista-${listaCanc.id}`, listaCanc.nombre, cancionesLista.length);
+
+    const acciones = document.createElement("div");
+    acciones.className = "seccion-acciones";
+    acciones.append(
+      crearBotonChico("Renombrar", () => pedirNuevoNombre(listaCanc)),
+      crearBotonChico("Borrar lista", () => confirmarBorradoLista(listaCanc)),
+    );
+    seccion.appendChild(acciones);
+
+    const ul = document.createElement("ul");
+    ul.className = "lista-canciones";
+    for (const cancion of cancionesLista) {
+      ul.appendChild(crearItemCancion(cancion, {
+        accion: {
+          texto: "−",
+          etiqueta: `Sacar ${cancion.nombre} de ${listaCanc.nombre}`,
+          alTocar: () => confirmarSacarDeLista(listaCanc, cancion),
+        },
+      }));
+    }
+    if (cancionesLista.length === 0) {
+      const vacia = document.createElement("p");
+      vacia.className = "aviso aviso-chico";
+      vacia.textContent = "Esta lista está vacía.";
+      seccion.appendChild(vacia);
+    }
+    seccion.appendChild(ul);
+    secciones.appendChild(seccion);
   }
 
-  mostrarEspacio(canciones, numero);
+  // "Todas las canciones": cada una con el botón para borrarla de la biblioteca.
+  if (todasLasCanciones.length > 0) {
+    const seccion = crearSeccion("todas", "Todas las canciones", todasLasCanciones.length);
+    const ul = document.createElement("ul");
+    ul.className = "lista-canciones";
+    for (const cancion of todasLasCanciones) {
+      ul.appendChild(crearItemCancion(cancion, {
+        accion: {
+          texto: "✕",
+          etiqueta: `Borrar ${cancion.nombre}`,
+          alTocar: () => confirmarBorrado(cancion),
+        },
+      }));
+    }
+    seccion.appendChild(ul);
+    secciones.appendChild(seccion);
+  }
+}
+
+/* ------------------------------------------------------------------
+   Buscador
+   ------------------------------------------------------------------ */
+
+/**
+ * ¿La canción coincide con lo buscado? Se separa la búsqueda en palabras y
+ * TODAS tienen que aparecer en el nombre (en cualquier lugar, sin importar
+ * mayúsculas ni tildes). Así "como un diam" encuentra "Airbag - Como un
+ * diamante", y "airbag" encuentra todas las que tienen "Airbag" en el nombre.
+ */
+function coincideBusqueda(cancion, palabras) {
+  const nombre = normalizarTexto(cancion.nombre);
+  return palabras.every((palabra) => nombre.includes(palabra));
+}
+
+// Nombres de las listas en las que está cada canción: Map(id -> ["Airbag", ...]).
+function listasPorCancion() {
+  const mapa = new Map();
+  for (const l of todasLasListas) {
+    for (const id of l.canciones) {
+      if (!mapa.has(id)) mapa.set(id, []);
+      mapa.get(id).push(l.nombre);
+    }
+  }
+  return mapa;
+}
+
+function dibujarResultados() {
+  const palabras = normalizarTexto(buscador.value).split(" ").filter(Boolean);
+  const encontradas = todasLasCanciones.filter((c) => coincideBusqueda(c, palabras));
+  const enListas = listasPorCancion();
+
+  resultadosBusqueda.replaceChildren(...encontradas.map((cancion) => {
+    const nombres = enListas.get(cancion.id);
+    return crearItemCancion(cancion, {
+      detalleExtra: nombres ? `En: ${nombres.join(", ")}` : "Sin lista",
+    });
+  }));
+
+  sinResultados.hidden = encontradas.length > 0;
+  sinResultados.textContent = `No encontré canciones con “${buscador.value.trim()}”.`;
+}
+
+// Mientras se escribe, filtramos con los datos que ya están en memoria.
+buscador.addEventListener("input", dibujarInicio);
+
+/* ------------------------------------------------------------------
+   Acciones sobre las listas (todas piden confirmación)
+   ------------------------------------------------------------------ */
+
+async function pedirNuevoNombre(listaCanc) {
+  const nuevo = prompt("Nuevo nombre de la lista:", listaCanc.nombre);
+  if (nuevo === null || nuevo.trim() === listaCanc.nombre) return;   // canceló o no cambió
+  try {
+    await renombrarLista(listaCanc.id, nuevo);
+  } catch (error) {
+    alert(error.message);
+    return;
+  }
+  mostrarBiblioteca();
+}
+
+async function confirmarBorradoLista(listaCanc) {
+  if (!confirm(`¿Borrar la lista "${listaCanc.nombre}"?\nLas canciones siguen guardadas en la biblioteca.`)) return;
+  try {
+    await borrarLista(listaCanc.id);
+  } catch (error) {
+    alert("No pude borrar la lista: " + error.message);
+  }
+  seccionesAbiertas.delete(`lista-${listaCanc.id}`);
+  recordarSecciones();
+  mostrarBiblioteca();
+}
+
+async function confirmarSacarDeLista(listaCanc, cancion) {
+  if (!confirm(`¿Sacar "${cancion.nombre}" de la lista "${listaCanc.nombre}"?\nLa canción sigue guardada en la biblioteca.`)) return;
+  try {
+    await sacarDeLista(listaCanc.id, cancion.id);
+  } catch (error) {
+    alert("No pude sacarla de la lista: " + error.message);
+  }
+  mostrarBiblioteca();
+}
+
+// Aviso corto abajo de la pantalla, que desaparece solo.
+let temporizadorMensaje = null;
+function mostrarMensaje(texto) {
+  mensaje.textContent = texto;
+  mensaje.hidden = false;
+  clearTimeout(temporizadorMensaje);
+  temporizadorMensaje = setTimeout(() => { mensaje.hidden = true; }, 2500);
 }
 
 // Pie de la biblioteca: cuánto ocupan las canciones, cuánto espacio queda
@@ -274,6 +525,7 @@ function limpiarFormulario() {
   nombreMp3.textContent = "Ningún archivo";
   nombreJson.textContent = "Lo analiza el celu";
   inputNombre.value = "";
+  inputLista.value = "";
   mostrarAviso("");
   revisarFormulario();
 }
@@ -381,7 +633,7 @@ botonGuardar.addEventListener("click", async () => {
       ajuste: 0,
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
-    }, mp3Elegido);
+    }, mp3Elegido, inputLista.value);   // si hay lista, se agrega en la misma operación
   } catch (error) {
     const sinEspacio = error && error.name === "QuotaExceededError";
     mostrarAviso(sinEspacio
@@ -482,6 +734,42 @@ async function cargarCancion(id) {
 
 // Botón "↻": vuelve a analizar en el celular el mp3 guardado y reemplaza
 // los acordes. Se mantienen el nombre y el ajuste de sincronización.
+// Botón "+ Lista": abre la ventana para agregar la canción a una lista.
+botonAgregarLista.addEventListener("click", async () => {
+  if (idActual === null) return;
+  // Mostramos en qué listas ya está (leemos de nuevo por si cambió algo).
+  try {
+    todasLasListas = await listarListas();
+  } catch {
+    // si falla, usamos lo que ya teníamos
+  }
+  actualizarSugerencias();
+  const nombres = todasLasListas.filter((l) => l.canciones.includes(idActual)).map((l) => l.nombre);
+  listasDeCancion.textContent = nombres.length
+    ? `Ya está en: ${nombres.join(", ")}.`
+    : "Todavía no está en ninguna lista.";
+  inputListaDialogo.value = "";
+  dialogoLista.showModal();
+  inputListaDialogo.focus();
+});
+
+botonCerrarDialogo.addEventListener("click", () => dialogoLista.close());
+
+// Al confirmar: la canción va primera en esa lista (que se crea si no existe).
+formLista.addEventListener("submit", async (evento) => {
+  evento.preventDefault();
+  const nombreLista = inputListaDialogo.value.replace(/\s+/g, " ").trim();
+  if (!nombreLista || idActual === null) return;
+  try {
+    await agregarALista(nombreLista, idActual);
+  } catch (error) {
+    alert("No pude agregarla a la lista: " + error.message);
+    return;
+  }
+  dialogoLista.close();
+  mostrarMensaje(`Agregada a “${nombreLista}”`);
+});
+
 botonReanalizar.addEventListener("click", async () => {
   if (idActual === null) return;
   if (!confirm("¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.")) return;
