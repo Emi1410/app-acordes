@@ -107,7 +107,11 @@ function puedeSalirDelEditor() {
   return true;
 }
 
-botonEditar.addEventListener("click", empezarEdicion);
+// El botón está en el panel "Más": lo cerramos y entramos al editor.
+botonEditar.addEventListener("click", () => {
+  panelOpciones.close();
+  empezarEdicion();
+});
 editarSalir.addEventListener("click", puedeSalirDelEditor);
 
 /* ------------------------------------------------------------------
@@ -116,8 +120,10 @@ editarSalir.addEventListener("click", puedeSalirDelEditor);
    Usamos "pointer events", que funcionan igual con el dedo y con el
    mouse. En modo edición la tira no se desplaza con el dedo (CSS
    touch-action: none) para poder arrastrar; si el dedo llega a un borde,
-   la tira se corre sola. Para ir a otra parte de la canción se usa la
-   barra de tiempo, que sigue visible.
+   la tira se corre sola. Para ir a otra parte de la canción se usan el
+   play y la barra de tiempo, que siguen visibles: se escucha, se pausa
+   donde hace falta y la tira queda en ese lugar. Al empezar a elegir
+   pulsos, la canción se pausa sola.
    ------------------------------------------------------------------ */
 
 let arrastreDesde = null;   // pulso donde empezó el arrastre
@@ -133,6 +139,8 @@ tira.addEventListener("pointerdown", (evento) => {
   const indice = pulsoBajoElDedo(evento);
   if (indice === null) return;
   evento.preventDefault();
+  // Si estaba sonando (para escuchar dónde editar), se pausa al empezar a elegir.
+  if (!audio.paused) audio.pause();
   arrastreDesde = indice;
   seleccion = { desde: indice, hasta: indice };
   // "Capturar" el dedo: los movimientos siguen llegando aunque salga de la tira.

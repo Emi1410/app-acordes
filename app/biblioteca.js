@@ -200,6 +200,25 @@ function agregarALista(nombreLista, idCancion) {
   });
 }
 
+/**
+ * Guarda un orden nuevo para una lista (por ejemplo, después de arrastrar
+ * una canción). "ids" tiene que tener exactamente las mismas canciones que
+ * la lista: si no coincide (porque algo cambió mientras tanto), no se toca.
+ */
+function ordenarLista(idLista, ids) {
+  return transaccion(["listas"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("listas");
+    const pedido = almacen.get(idLista);
+    pedido.addEventListener("success", () => {
+      const lista = pedido.result;
+      if (!lista) return;
+      const mismas = ids.length === lista.canciones.length
+        && [...ids].sort((a, b) => a - b).join() === [...lista.canciones].sort((a, b) => a - b).join();
+      if (mismas) almacen.put({ ...lista, canciones: ids });
+    });
+  });
+}
+
 /** Saca una canción de una lista. La canción sigue en la biblioteca. */
 function sacarDeLista(idLista, idCancion) {
   return transaccion(["listas"], "readwrite", (tx) => {

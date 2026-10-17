@@ -294,9 +294,23 @@ function actualizarSugerencias() {
 // "contexto" dice desde dónde se abre la canción: { tipo: "lista", idLista }
 // o { tipo: "todas" } (también para el buscador). Define el orden de
 // "siguiente" y "anterior" en el reproductor.
-function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" } } = {}) {
+//
+// "manija": si es true, agrega a la izquierda una manija para arrastrar la
+// canción y cambiar su lugar en la lista.
+function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" }, manija = false } = {}) {
   const item = document.createElement("li");
   item.className = "cancion";
+  item.dataset.id = cancion.id;
+
+  if (manija) {
+    const agarre = document.createElement("span");
+    agarre.className = "manija";
+    agarre.setAttribute("aria-hidden", "true");
+    // Seis puntitos, el dibujo típico de "se puede arrastrar"
+    agarre.innerHTML = '<svg viewBox="0 0 12 20"><circle cx="3" cy="4" r="1.6"/><circle cx="9" cy="4" r="1.6"/>'
+      + '<circle cx="3" cy="10" r="1.6"/><circle cx="9" cy="10" r="1.6"/><circle cx="3" cy="16" r="1.6"/><circle cx="9" cy="16" r="1.6"/></svg>';
+    item.appendChild(agarre);
+  }
 
   const abrir = document.createElement("button");
   abrir.type = "button";
@@ -316,7 +330,7 @@ function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto 
   if (accion) {
     const boton = document.createElement("button");
     boton.type = "button";
-    boton.className = "cancion-borrar";
+    boton.className = "cancion-borrar" + (accion.clase ? " " + accion.clase : "");
     boton.textContent = accion.texto;
     boton.setAttribute("aria-label", accion.etiqueta);
     boton.addEventListener("click", accion.alTocar);
@@ -349,14 +363,77 @@ function crearSeccion(clave, tituloSeccion, cantidad) {
   return seccion;
 }
 
-// Botón chico de texto (para "Renombrar" y "Borrar lista").
-function crearBotonChico(texto, alTocar) {
+// Botón de acción de una lista ("Renombrar" o "Borrar lista"), con su propio estilo.
+function crearBotonLista(texto, clase, alTocar) {
   const boton = document.createElement("button");
   boton.type = "button";
-  boton.className = "boton boton-chico";
+  boton.className = "boton-lista " + clase;
   boton.textContent = texto;
   boton.addEventListener("click", alTocar);
   return boton;
+}
+
+/**
+ * Permite cambiar el orden de una lista arrastrando la manija de una
+ * canción. Mientras el dedo se mueve, la canción va cambiando de lugar en
+ * la pantalla; al soltar, el orden nuevo se guarda en la base.
+ * Usa "pointer events" (dedo o mouse). La manija tiene touch-action: none
+ * para que arrastrarla no desplace la pantalla.
+ */
+function habilitarArrastre(ul, idLista) {
+  const contenedor = document.querySelector(".contenido-biblioteca");
+  let arrastrado = null;
+  let ordenInicial = "";
+
+  ul.addEventListener("pointerdown", (evento) => {
+    const manija = evento.target.closest(".manija");
+    if (!manija) return;
+    evento.preventDefault();
+    arrastrado = manija.closest("li");
+    ordenInicial = [...ul.children].map((li) => li.dataset.id).join();
+    arrastrado.classList.add("arrastrando");
+    try {
+      manija.setPointerCapture(evento.pointerId);   // los movimientos siguen llegando a la manija
+    } catch {
+      // sin captura funciona igual mientras el dedo esté sobre la lista
+    }
+  });
+
+  ul.addEventListener("pointermove", (evento) => {
+    if (!arrastrado) return;
+    // Cerca de los bordes, la pantalla se desplaza sola.
+    const caja = contenedor.getBoundingClientRect();
+    if (evento.clientY < caja.top + 48) contenedor.scrollTop -= 12;
+    if (evento.clientY > caja.bottom - 48) contenedor.scrollTop += 12;
+
+    // La canción va antes de la primera cuya mitad queda debajo del dedo.
+    const otras = [...ul.children].filter((li) => li !== arrastrado);
+    const siguiente = otras.find((li) => {
+      const r = li.getBoundingClientRect();
+      return evento.clientY < r.top + r.height / 2;
+    });
+    if (siguiente) {
+      if (arrastrado.nextElementSibling !== siguiente) ul.insertBefore(arrastrado, siguiente);
+    } else if (ul.lastElementChild !== arrastrado) {
+      ul.appendChild(arrastrado);
+    }
+  });
+
+  const soltar = async () => {
+    if (!arrastrado) return;
+    arrastrado.classList.remove("arrastrando");
+    arrastrado = null;
+    const ids = [...ul.children].map((li) => Number(li.dataset.id));
+    if (ids.join() === ordenInicial) return;      // no cambió nada
+    try {
+      await ordenarLista(idLista, ids);
+    } catch (error) {
+      alert("No pude guardar el orden: " + error.message);
+    }
+    mostrarBiblioteca();
+  };
+  ul.addEventListener("pointerup", soltar);
+  ul.addEventListener("pointercancel", soltar);
 }
 
 // Pantalla de inicio sin búsqueda: una sección por lista y al final "Todas las canciones".
@@ -372,8 +449,8 @@ function dibujarSecciones() {
     const acciones = document.createElement("div");
     acciones.className = "seccion-acciones";
     acciones.append(
-      crearBotonChico("Renombrar", () => pedirNuevoNombre(listaCanc)),
-      crearBotonChico("Borrar lista", () => confirmarBorradoLista(listaCanc)),
+      crearBotonLista("Renombrar", "boton-renombrar", () => pedirNuevoNombre(listaCanc)),
+      crearBotonLista("Borrar lista", "boton-borrar-lista", () => confirmarBorradoLista(listaCanc)),
     );
     seccion.appendChild(acciones);
 
@@ -382,13 +459,16 @@ function dibujarSecciones() {
     for (const cancion of cancionesLista) {
       ul.appendChild(crearItemCancion(cancion, {
         accion: {
-          texto: "−",
-          etiqueta: `Sacar ${cancion.nombre} de ${listaCanc.nombre}`,
+          texto: "Quitar",
+          clase: "cancion-quitar",
+          etiqueta: `Quitar ${cancion.nombre} de la lista ${listaCanc.nombre}`,
           alTocar: () => confirmarSacarDeLista(listaCanc, cancion),
         },
         contexto: { tipo: "lista", idLista: listaCanc.id },
+        manija: cancionesLista.length > 1,   // con una sola canción no hay nada que ordenar
       }));
     }
+    habilitarArrastre(ul, listaCanc.id);
     if (cancionesLista.length === 0) {
       const vacia = document.createElement("p");
       vacia.className = "aviso aviso-chico";
@@ -847,6 +927,7 @@ formLista.addEventListener("submit", async (evento) => {
 
 botonReanalizar.addEventListener("click", async () => {
   if (idActual === null) return;
+  panelOpciones.close();   // el botón está en el panel "Más"
   // Si la canción tiene acordes corregidos a mano, se avisa que se pierden.
   const pregunta = cancionActual && cancionActual.editada
     ? "Esta canción tiene acordes corregidos a mano.\nSi la volvés a analizar, se pierden esos cambios. ¿Seguir?"
@@ -1000,7 +1081,9 @@ const botonMas = document.getElementById("boton-mas");
 const resumenOpciones = document.getElementById("resumen-opciones");
 const panelOpciones = document.getElementById("panel-opciones");
 const botonCerrarOpciones = document.getElementById("boton-cerrar-opciones");
-const botonesVelocidad = [...document.querySelectorAll("#velocidades button")];
+const velocidadMenos = document.getElementById("velocidad-menos");
+const velocidadMas = document.getElementById("velocidad-mas");
+const valorVelocidad = document.getElementById("valor-velocidad");
 const volumenCancionControl = document.getElementById("volumen-cancion");
 const volumenMetronomoControl = document.getElementById("volumen-metronomo");
 const reproduccionContinuaControl = document.getElementById("reproduccion-continua");
@@ -1182,6 +1265,9 @@ audio.addEventListener("ratechange", reiniciarMetronomo);
    Velocidad (sin cambiar el tono)
    ------------------------------------------------------------------ */
 
+// Las velocidades posibles, de la más lenta a la más rápida.
+const VELOCIDADES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
 function textoVelocidad(v) {
   return "x" + String(v);
 }
@@ -1191,20 +1277,23 @@ function aplicarVelocidad(v) {
   audio.preservesPitch = true;
   audio.defaultPlaybackRate = v;
   audio.playbackRate = v;
-  for (const boton of botonesVelocidad) {
-    boton.setAttribute("aria-pressed", String(Number(boton.dataset.velocidad) === v));
-  }
+  valorVelocidad.textContent = textoVelocidad(v);
+  velocidadMenos.disabled = v <= VELOCIDADES[0];
+  velocidadMas.disabled = v >= VELOCIDADES[VELOCIDADES.length - 1];
   resumenOpciones.textContent = textoVelocidad(v);
 }
 
-for (const boton of botonesVelocidad) {
-  boton.addEventListener("click", () => {
-    const v = Number(boton.dataset.velocidad);
-    aplicarVelocidad(v);
-    // Se recuerda por canción.
-    if (idActual !== null) actualizarCancion(idActual, { velocidad: v }).catch(() => {});
-  });
+// − y + pasan a la velocidad anterior o siguiente de la lista.
+function cambiarVelocidad(paso) {
+  const actual = VELOCIDADES.indexOf(audio.playbackRate);
+  const nueva = VELOCIDADES[Math.min(VELOCIDADES.length - 1, Math.max(0, (actual < 0 ? 2 : actual) + paso))];
+  aplicarVelocidad(nueva);
+  // Se recuerda por canción.
+  if (idActual !== null) actualizarCancion(idActual, { velocidad: nueva }).catch(() => {});
 }
+
+velocidadMenos.addEventListener("click", () => cambiarVelocidad(-1));
+velocidadMas.addEventListener("click", () => cambiarVelocidad(+1));
 
 /* ------------------------------------------------------------------
    Panel de opciones, volúmenes y reproducción continua
@@ -1584,7 +1673,7 @@ const transporteMas = document.getElementById("transporte-mas");
 const transporteCero = document.getElementById("transporte-cero");
 const cejillaMenos = document.getElementById("cejilla-menos");
 const cejillaMas = document.getElementById("cejilla-mas");
-const botonesAfinacion = [...document.querySelectorAll("#afinaciones button")];
+const selectorAfinacion = document.getElementById("selector-afinacion");
 
 const NOMBRES_AFINACION = { "-1": "Afinación Eb", "-2": "Afinación D" };
 
@@ -1611,9 +1700,7 @@ function mostrarOpcionesAcordes() {
   transporteCero.disabled = transporte === 0;
   cejillaMenos.disabled = cejilla <= 0;
   cejillaMas.disabled = cejilla >= 9;
-  for (const boton of botonesAfinacion) {
-    boton.setAttribute("aria-pressed", String(Number(boton.dataset.afinacion) === afinacion));
-  }
+  selectorAfinacion.value = String(afinacion);
 
   // Aviso arriba de la tira: qué está activo y en qué tonalidad quedan las formas.
   const partes = [];
@@ -1650,9 +1737,10 @@ transporteMas.addEventListener("click", () => { transporte = Math.min(6, transpo
 transporteCero.addEventListener("click", () => { transporte = 0; cambiarOpcionesAcordes(); });
 cejillaMenos.addEventListener("click", () => { cejilla = Math.max(0, cejilla - 1); cambiarOpcionesAcordes(); });
 cejillaMas.addEventListener("click", () => { cejilla = Math.min(9, cejilla + 1); cambiarOpcionesAcordes(); });
-for (const boton of botonesAfinacion) {
-  boton.addEventListener("click", () => { afinacion = Number(boton.dataset.afinacion); cambiarOpcionesAcordes(); });
-}
+selectorAfinacion.addEventListener("change", () => {
+  afinacion = Number(selectorAfinacion.value);
+  cambiarOpcionesAcordes();
+});
 
 // Clave con la que se recuerda la posición elegida de una forma. Con cejilla
 // o afinación distinta de la estándar se recuerda aparte: así, aunque sin

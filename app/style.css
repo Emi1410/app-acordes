@@ -293,13 +293,17 @@ body {
   gap: 8px;
 }
 
-/* Mientras se edita no se reproduce: se ocultan los controles que no sirven */
-#pantalla-reproductor.editando .transporte,
+/* Mientras se edita quedan solo el play y la barra de tiempo (para escuchar
+   y pararse donde hay que corregir); se ocultan los demás controles. */
+#pantalla-reproductor.editando .transporte > :not(#boton-play),
 #pantalla-reproductor.editando .ajuste,
 #pantalla-reproductor.editando .fila-vista,
-#pantalla-reproductor.editando #boton-agregar-lista,
-#pantalla-reproductor.editando #boton-reanalizar {
+#pantalla-reproductor.editando #boton-agregar-lista {
   display: none;
+}
+
+#pantalla-reproductor.editando .transporte {
+  grid-template-columns: 1fr;
 }
 
 /* En modo edición, el dedo elige pulsos en vez de desplazar la tira */
@@ -495,8 +499,66 @@ body {
 
 .seccion-acciones {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+/* Botones de las listas: más chicos, redondeados y con color, para que no
+   se confundan con las canciones. */
+.boton-lista {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.boton-renombrar {
+  border: 1.5px solid var(--acento);
+  color: var(--acento);
+}
+
+.boton-borrar-lista {
+  border: 1.5px solid #e5534b;
+  background: #3a1d1d;
+  color: #ffb4b4;
+}
+
+.boton-lista:active {
+  transform: scale(0.97);
+}
+
+/* Manija para arrastrar una canción dentro de la lista */
+.manija {
+  flex: none;
+  width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--texto-suave);
+  touch-action: none;     /* arrastrar la manija no desplaza la pantalla */
+  cursor: grab;
+}
+
+.manija svg {
+  width: 12px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* La canción que se está arrastrando, "levantada" */
+.cancion.arrastrando .cancion-abrir {
+  border-color: var(--acento);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+}
+
+.cancion.arrastrando .manija {
+  color: var(--acento);
+  cursor: grabbing;
 }
 
 /* Botón de texto más bajito (Renombrar, Borrar lista, + Lista) */
@@ -611,6 +673,16 @@ body {
   font: inherit;
   font-size: 1.2rem;
   cursor: pointer;
+}
+
+/* "Quitar" (de una lista): con texto y en rojo suave, distinto de borrar */
+.cancion-quitar {
+  width: auto;
+  padding: 0 10px;
+  border-color: #6b2b2b;
+  color: #ff9a9a;
+  font-size: 0.85rem;
+  font-weight: 600;
 }
 
 .cancion-abrir:active,
@@ -1002,13 +1074,44 @@ body {
 .hoja-contenido {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  gap: 10px;              /* compacto: que entre todo sin desplazarse */
+  padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
 }
 
 .hoja-contenido h2 {
   margin: 0;
-  font-size: 1.3rem;
+  font-size: 1.15rem;
+}
+
+/* Acciones de la canción en el panel: grilla de 2 columnas */
+.acciones-cancion {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.acciones-cancion .boton-chico {
+  padding: 0 8px;
+  font-size: 0.88rem;
+}
+
+/* Fila con nombre a la izquierda y un control a la derecha (afinación) */
+.fila-opcion {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--texto-suave);
+}
+
+.fila-opcion select {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
 }
 
 .grupo-opciones {
@@ -1062,7 +1165,7 @@ body {
 
 .paso button {
   min-width: 48px;
-  min-height: 44px;
+  min-height: 40px;
   border: 1px solid var(--borde);
   border-radius: 12px;
   background: var(--fondo);
@@ -1085,15 +1188,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.etiqueta-opcion {
-  color: var(--texto-suave);
-}
-
-/* La botonera de afinación tiene textos más largos: una opción por fila */
-#afinaciones {
-  grid-template-columns: 1fr;
-}
-
 /* Aviso en la pantalla principal cuando hay transporte, cejilla o afinación */
 .indicador-acordes {
   margin: 0;
@@ -1108,26 +1202,32 @@ body {
 
 .control-volumen {
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 112px 1fr;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   color: var(--texto-suave);
 }
 
 .control-volumen input {
   width: 100%;
-  height: 36px;
+  height: 30px;
   accent-color: var(--acento);
 }
 
-/* Casilla grande para "Reproducción continua" */
+/* Casilla para "Reproducción continua" */
 .interruptor {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: 40px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.interruptor small {
+  display: block;
+  color: var(--texto-suave);
+  font-weight: 400;
 }
 
 .interruptor input {

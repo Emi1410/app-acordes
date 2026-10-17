@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=2.0">
+  <link rel="stylesheet" href="style.css?v=2.1">
 </head>
 <body>
 
@@ -93,18 +93,15 @@
         <small id="posicion-lista" class="posicion-lista"></small>
       </div>
       <button id="boton-agregar-lista" class="boton boton-chico" type="button">+ Lista</button>
-      <button id="boton-reanalizar" class="boton boton-volver" type="button"
-              aria-label="Volver a analizar la canción" title="Volver a analizar">↻</button>
     </header>
 
-    <!-- Selector de vista: tira de pulsos o grilla de acordes (se recuerda la elección) -->
+    <!-- Selector de vista: tira de pulsos o grilla de acordes (se recuerda la elección).
+         "Editar" y "Volver a analizar" están en el panel "Más". -->
     <div class="fila-vista">
       <div class="selector-vista" role="group" aria-label="Vista del reproductor">
         <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
         <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
       </div>
-      <!-- Activa el editor de acordes (pausa la canción) -->
-      <button id="boton-editar" class="boton boton-chico" type="button">✎ Editar</button>
     </div>
 
     <!-- Aviso de transporte, cejilla o afinación activos ("Cejilla 4 · formas de C") -->
@@ -244,73 +241,64 @@
     <div class="hoja-contenido">
       <h2>Opciones</h2>
 
-      <section class="grupo-opciones">
-        <h3>Velocidad <small>(sin cambiar el tono)</small></h3>
-        <div id="velocidades" class="botonera" role="group" aria-label="Velocidad">
-          <button type="button" data-velocidad="0.5">x0.5</button>
-          <button type="button" data-velocidad="0.75">x0.75</button>
-          <button type="button" data-velocidad="1">x1</button>
-          <button type="button" data-velocidad="1.25">x1.25</button>
-          <button type="button" data-velocidad="1.5">x1.5</button>
-          <button type="button" data-velocidad="2">x2</button>
-        </div>
-      </section>
-
-      <section class="grupo-opciones">
-        <h3>Acordes <small>(cambia lo que se muestra, no el sonido)</small></h3>
-
-        <!-- Transportar: de -6 a +6 semitonos -->
-        <div class="paso">
-          <span>Transportar</span>
-          <button id="transporte-menos" type="button" aria-label="Bajar un semitono">−1</button>
-          <output id="valor-transporte">0</output>
-          <button id="transporte-mas" type="button" aria-label="Subir un semitono">+1</button>
-          <button id="transporte-cero" type="button" aria-label="Volver al tono original">0</button>
-        </div>
-
-        <!-- Cejilla (capo): de 0 a 9 -->
-        <div class="paso">
-          <span>Cejilla</span>
-          <button id="cejilla-menos" type="button" aria-label="Bajar la cejilla">−</button>
-          <output id="valor-cejilla">No</output>
-          <button id="cejilla-mas" type="button" aria-label="Subir la cejilla">+</button>
-        </div>
-
-        <span class="etiqueta-opcion">Afinación de la guitarra</span>
-        <div id="afinaciones" class="botonera" role="group" aria-label="Afinación">
-          <button type="button" data-afinacion="0">Estándar</button>
-          <button type="button" data-afinacion="-1">½ tono abajo (Eb)</button>
-          <button type="button" data-afinacion="-2">1 tono abajo (D)</button>
-        </div>
-      </section>
-
-      <section class="grupo-opciones">
-        <h3>Volumen</h3>
-        <label class="control-volumen">
-          <span>Canción</span>
-          <input type="range" id="volumen-cancion" min="0" max="1" step="0.05" value="1">
-        </label>
-        <label class="control-volumen">
-          <span>Metrónomo</span>
-          <input type="range" id="volumen-metronomo" min="0" max="1" step="0.05" value="0.7">
-        </label>
-      </section>
-
-      <section class="grupo-opciones">
-        <label class="interruptor">
-          <input type="checkbox" id="reproduccion-continua">
-          <span>Reproducción continua</span>
-        </label>
-        <p class="ayuda">Al terminar una canción empieza la siguiente. Al terminar la lista, sigue con la primera de la lista siguiente.</p>
-      </section>
-
-      <section class="grupo-opciones">
-        <h3>Canción</h3>
+      <!-- Acciones sobre la canción -->
+      <div class="acciones-cancion">
+        <!-- Activa el editor de acordes (pausa la canción) -->
+        <button id="boton-editar" class="boton boton-chico" type="button">✎ Editar acordes</button>
+        <button id="boton-reanalizar" class="boton boton-chico" type="button">↻ Volver a analizar</button>
         <!-- Baja el JSON con los acordes (y sus correcciones) para usarlo en otro celular o compu -->
-        <button id="boton-exportar" class="boton" type="button">Exportar JSON</button>
+        <button id="boton-exportar" class="boton boton-chico" type="button">Exportar JSON</button>
         <!-- Solo aparece si la canción fue editada -->
-        <button id="boton-restaurar" class="boton" type="button" hidden>Restaurar análisis original</button>
-      </section>
+        <button id="boton-restaurar" class="boton boton-chico" type="button" hidden>Restaurar análisis original</button>
+      </div>
+
+      <!-- Velocidad: − y + recorren x0.5, x0.75, x1, x1.25, x1.5 y x2 (sin cambiar el tono) -->
+      <div class="paso">
+        <span>Velocidad</span>
+        <button id="velocidad-menos" type="button" aria-label="Más lento">−</button>
+        <output id="valor-velocidad">x1</output>
+        <button id="velocidad-mas" type="button" aria-label="Más rápido">+</button>
+      </div>
+
+      <!-- Transportar: de -6 a +6 semitonos (cambia lo que se muestra, no el sonido) -->
+      <div class="paso">
+        <span>Transportar</span>
+        <button id="transporte-menos" type="button" aria-label="Bajar un semitono">−</button>
+        <output id="valor-transporte">0</output>
+        <button id="transporte-mas" type="button" aria-label="Subir un semitono">+</button>
+        <button id="transporte-cero" type="button" aria-label="Volver al tono original">0</button>
+      </div>
+
+      <!-- Cejilla (capo): de 0 a 9 -->
+      <div class="paso">
+        <span>Cejilla</span>
+        <button id="cejilla-menos" type="button" aria-label="Bajar la cejilla">−</button>
+        <output id="valor-cejilla">No</output>
+        <button id="cejilla-mas" type="button" aria-label="Subir la cejilla">+</button>
+      </div>
+
+      <label class="fila-opcion">
+        <span>Afinación</span>
+        <select id="selector-afinacion">
+          <option value="0">Estándar</option>
+          <option value="-1">½ tono abajo (Eb)</option>
+          <option value="-2">1 tono abajo (D)</option>
+        </select>
+      </label>
+
+      <label class="control-volumen">
+        <span>Vol. canción</span>
+        <input type="range" id="volumen-cancion" min="0" max="1" step="0.05" value="1">
+      </label>
+      <label class="control-volumen">
+        <span>Vol. metrónomo</span>
+        <input type="range" id="volumen-metronomo" min="0" max="1" step="0.05" value="0.7">
+      </label>
+
+      <label class="interruptor" title="Al terminar una canción empieza la siguiente; al terminar la lista, la primera de la lista siguiente.">
+        <input type="checkbox" id="reproduccion-continua">
+        <span>Reproducción continua <small>(sigue con la próxima canción o lista)</small></span>
+      </label>
 
       <button id="boton-cerrar-opciones" class="boton boton-principal" type="button">Listo</button>
     </div>
@@ -371,12 +359,12 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=2.0"></script>
-  <script src="acordes.js?v=2.0"></script>
-  <script src="diagrama.js?v=2.0"></script>
-  <script src="biblioteca.js?v=2.0"></script>
-  <script src="analizador.js?v=2.0"></script>
-  <script src="app.js?v=2.0"></script>
-  <script src="editor.js?v=2.0"></script>
+  <script src="acordes-extra.js?v=2.1"></script>
+  <script src="acordes.js?v=2.1"></script>
+  <script src="diagrama.js?v=2.1"></script>
+  <script src="biblioteca.js?v=2.1"></script>
+  <script src="analizador.js?v=2.1"></script>
+  <script src="app.js?v=2.1"></script>
+  <script src="editor.js?v=2.1"></script>
 </body>
 </html>
