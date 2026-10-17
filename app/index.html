@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=1.9">
+  <link rel="stylesheet" href="style.css?v=2.0">
 </head>
 <body>
 
@@ -98,9 +98,13 @@
     </header>
 
     <!-- Selector de vista: tira de pulsos o grilla de acordes (se recuerda la elección) -->
-    <div class="selector-vista" role="group" aria-label="Vista del reproductor">
-      <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
-      <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
+    <div class="fila-vista">
+      <div class="selector-vista" role="group" aria-label="Vista del reproductor">
+        <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
+        <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
+      </div>
+      <!-- Activa el editor de acordes (pausa la canción) -->
+      <button id="boton-editar" class="boton boton-chico" type="button">✎ Editar</button>
     </div>
 
     <!-- Aviso de transporte, cejilla o afinación activos ("Cejilla 4 · formas de C") -->
@@ -130,6 +134,24 @@
           <b id="nombre-despues" class="nombre-par">–</b>
           <small id="cuenta-despues">Sigue</small>
         </div>
+      </div>
+    </div>
+
+    <!-- ===== Barra del editor de acordes (solo en modo edición) ===== -->
+    <div id="barra-edicion" class="barra-edicion">
+      <p id="seleccion-edicion" class="seleccion-edicion">Tocá un pulso o arrastrá para elegir varios.</p>
+      <div class="botones-edicion">
+        <button id="editar-cambiar" class="boton boton-chico" type="button">Cambiar acorde</button>
+        <button id="editar-paso" class="boton boton-chico" type="button">Acorde de paso</button>
+        <button id="editar-sin" class="boton boton-chico" type="button">Sin acorde</button>
+        <button id="editar-copiar" class="boton boton-chico" type="button">Copiar</button>
+        <button id="editar-pegar" class="boton boton-chico" type="button">Pegar</button>
+      </div>
+      <div class="botones-edicion-fin">
+        <button id="editar-deshacer" class="boton boton-chico" type="button" aria-label="Deshacer">↶ Deshacer</button>
+        <button id="editar-rehacer" class="boton boton-chico" type="button" aria-label="Rehacer">↷ Rehacer</button>
+        <button id="editar-salir" class="boton boton-chico" type="button">Salir</button>
+        <button id="editar-guardar" class="boton boton-chico boton-principal" type="button">Guardar</button>
       </div>
     </div>
 
@@ -282,7 +304,42 @@
         <p class="ayuda">Al terminar una canción empieza la siguiente. Al terminar la lista, sigue con la primera de la lista siguiente.</p>
       </section>
 
+      <section class="grupo-opciones">
+        <h3>Canción</h3>
+        <!-- Baja el JSON con los acordes (y sus correcciones) para usarlo en otro celular o compu -->
+        <button id="boton-exportar" class="boton" type="button">Exportar JSON</button>
+        <!-- Solo aparece si la canción fue editada -->
+        <button id="boton-restaurar" class="boton" type="button" hidden>Restaurar análisis original</button>
+      </section>
+
       <button id="boton-cerrar-opciones" class="boton boton-principal" type="button">Listo</button>
+    </div>
+  </dialog>
+
+  <!-- ==============================================================
+       Ventana para elegir un acorde (editor): raíz, tipo y bajo,
+       con el diagrama a la vista antes de confirmar
+       ============================================================== -->
+  <dialog id="dialogo-acorde" class="dialogo hoja">
+    <div class="hoja-contenido">
+      <h2 id="titulo-dialogo-acorde">Cambiar acorde</h2>
+      <p id="ayuda-dialogo-acorde" class="ayuda"></p>
+      <div class="vista-previa">
+        <div id="previa-diagrama" class="previa-diagrama"></div>
+        <b id="previa-nombre" class="previa-nombre">C</b>
+      </div>
+      <h3>Raíz</h3>
+      <div id="selector-raiz" class="botonera botonera-notas" role="group" aria-label="Raíz"></div>
+      <h3>Tipo</h3>
+      <div id="selector-tipo" class="botonera botonera-tipos" role="group" aria-label="Tipo de acorde"></div>
+      <label class="campo">
+        Bajo (para acordes como D/F#)
+        <select id="selector-bajo"></select>
+      </label>
+      <div class="dialogo-botones">
+        <button id="acorde-cancelar" class="boton" type="button">Cancelar</button>
+        <button id="acorde-confirmar" class="boton boton-principal" type="button">Confirmar</button>
+      </div>
     </div>
   </dialog>
 
@@ -314,10 +371,12 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes.js?v=1.9"></script>
-  <script src="diagrama.js?v=1.9"></script>
-  <script src="biblioteca.js?v=1.9"></script>
-  <script src="analizador.js?v=1.9"></script>
-  <script src="app.js?v=1.9"></script>
+  <script src="acordes-extra.js?v=2.0"></script>
+  <script src="acordes.js?v=2.0"></script>
+  <script src="diagrama.js?v=2.0"></script>
+  <script src="biblioteca.js?v=2.0"></script>
+  <script src="analizador.js?v=2.0"></script>
+  <script src="app.js?v=2.0"></script>
+  <script src="editor.js?v=2.0"></script>
 </body>
 </html>

@@ -269,7 +269,12 @@ function actualizarAnalisis(id, { tonalidad, tempo, acordes, pulsos, compases })
     const pedido = almacen.get(id);
     pedido.addEventListener("success", () => {
       if (pedido.result) {
-        almacen.put({ ...pedido.result, tonalidad, tempo, acordes, pulsos, compases });
+        // Un análisis nuevo reemplaza todo: también las correcciones a mano
+        // y la copia del análisis original que guarda el editor.
+        almacen.put({
+          ...pedido.result, tonalidad, tempo, acordes, pulsos, compases,
+          acordesOriginales: null, editada: false,
+        });
       }
     });
   });
@@ -333,18 +338,13 @@ function validarDatosCancion(datos) {
   if (datos.acordes.length === 0) {
     return "La lista de acordes está vacía.";
   }
-  for (let i = 0; i < datos.acordes.length; i++) {
-    const tramo = datos.acordes[i];
-    const valido = tramo
-      && typeof tramo.inicio === "number"
-      && typeof tramo.fin === "number"
-      && typeof tramo.acorde === "string"
-      && tramo.fin >= tramo.inicio;
-    if (!valido) {
-      return `El acorde número ${i + 1} no tiene "inicio", "fin" y "acorde" válidos.`;
-    }
-    if (i > 0 && tramo.inicio < datos.acordes[i - 1].inicio) {
-      return `Los acordes no están ordenados por tiempo (fijate el número ${i + 1}).`;
+  const problema = validarTramos(datos.acordes);
+  if (problema) return problema;
+  // Un JSON exportado de una canción editada trae también el análisis original.
+  if (datos.acordesOriginales !== undefined && datos.acordesOriginales !== null) {
+    if (!Array.isArray(datos.acordesOriginales) || datos.acordesOriginales.length === 0
+        || validarTramos(datos.acordesOriginales)) {
+      return "La lista \"acordesOriginales\" del JSON no tiene el formato esperado.";
     }
   }
   if (datos.tempo !== undefined && typeof datos.tempo !== "number") {
@@ -358,6 +358,25 @@ function validarDatosCancion(datos) {
     const valida = Array.isArray(lista)
       && lista.every((t, i) => typeof t === "number" && (i === 0 || t >= lista[i - 1]));
     if (!valida) return `El campo "${campo}" del JSON tiene que ser una lista de segundos en orden.`;
+  }
+  return null;
+}
+
+/** Revisa una lista de tramos { inicio, fin, acorde }. Devuelve el problema o null. */
+function validarTramos(acordes) {
+  for (let i = 0; i < acordes.length; i++) {
+    const tramo = acordes[i];
+    const valido = tramo
+      && typeof tramo.inicio === "number"
+      && typeof tramo.fin === "number"
+      && typeof tramo.acorde === "string"
+      && tramo.fin >= tramo.inicio;
+    if (!valido) {
+      return `El acorde número ${i + 1} no tiene "inicio", "fin" y "acorde" válidos.`;
+    }
+    if (i > 0 && tramo.inicio < acordes[i - 1].inicio) {
+      return `Los acordes no están ordenados por tiempo (fijate el número ${i + 1}).`;
+    }
   }
   return null;
 }

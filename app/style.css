@@ -105,8 +105,22 @@ body {
    Biblioteca: lista de canciones
    ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------
-   Reproductor: selector de vista (Pulsos / Grilla)
+   Reproductor: selector de vista (Pulsos / Grilla) y botón Editar
    ------------------------------------------------------------------ */
+.fila-vista {
+  display: flex;
+  gap: 8px;
+}
+
+.fila-vista .selector-vista {
+  flex: 1;
+}
+
+.fila-vista .boton-chico {
+  flex: none;
+  min-height: 50px;
+}
+
 .selector-vista {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -262,6 +276,124 @@ body {
 
 .columna-diagrama:first-child .diagrama .punto {
   fill: var(--acento);
+}
+
+/* ------------------------------------------------------------------
+   Editor de acordes
+   ------------------------------------------------------------------ */
+
+/* La barra de edición solo se ve en modo edición */
+.barra-edicion {
+  display: none;
+}
+
+#pantalla-reproductor.editando .barra-edicion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Mientras se edita no se reproduce: se ocultan los controles que no sirven */
+#pantalla-reproductor.editando .transporte,
+#pantalla-reproductor.editando .ajuste,
+#pantalla-reproductor.editando .fila-vista,
+#pantalla-reproductor.editando #boton-agregar-lista,
+#pantalla-reproductor.editando #boton-reanalizar {
+  display: none;
+}
+
+/* En modo edición, el dedo elige pulsos en vez de desplazar la tira */
+#pantalla-reproductor.editando .tira {
+  touch-action: none;
+  border-color: var(--acento);
+}
+
+/* Pulsos elegidos */
+.pulso.seleccionado {
+  background: rgba(245, 184, 61, 0.3);
+  box-shadow: inset 0 0 0 2px var(--acento);
+}
+
+.seleccion-edicion {
+  margin: 0;
+  min-height: 1.4em;
+  color: var(--texto);
+  font-weight: 600;
+  text-align: center;
+}
+
+.botones-edicion {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.botones-edicion-fin {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.botones-edicion .boton-chico,
+.botones-edicion-fin .boton-chico {
+  padding: 0 6px;
+  font-size: 0.85rem;
+}
+
+/* Ventana para elegir un acorde: vista previa con diagrama y nombre */
+.vista-previa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 130px;
+}
+
+.previa-diagrama {
+  width: 110px;
+  display: flex;
+  justify-content: center;
+  color: var(--texto-suave);
+  text-align: center;
+}
+
+.previa-diagrama .diagrama {
+  width: 110px;
+  height: auto;
+}
+
+.previa-diagrama .diagrama .punto {
+  fill: var(--acento);
+}
+
+.previa-nombre {
+  font-size: 2.4rem;
+  color: var(--acento);
+}
+
+.botonera-notas {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.botonera-tipos {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.botonera-notas button,
+.botonera-tipos button {
+  min-height: 42px;
+  padding: 0 4px;
+  font-size: 0.9rem;
+}
+
+.campo select {
+  min-height: var(--alto-boton);
+  padding: 0 12px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
 }
 
 /* Buscador arriba de todo */

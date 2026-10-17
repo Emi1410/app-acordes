@@ -191,11 +191,19 @@ function abrirPantalla(nombre) {
 // Botones "←": si hay una entrada en el historial, retrocedemos (eso
 // dispara "popstate", que hace el resto). Si no, volvemos directo.
 function volverABiblioteca() {
+  // Si se está editando con cambios sin guardar, primero se pregunta (editor.js).
+  if (!puedeSalirDelEditor()) return;
   if (pantallaEnHistorial) history.back();
   else alVolverABiblioteca();
 }
 
 function alVolverABiblioteca() {
+  // El "atrás" de Android no se puede frenar: si hay cambios sin guardar y el
+  // usuario prefiere quedarse, volvemos a poner la entrada en el historial.
+  if (!puedeSalirDelEditor()) {
+    history.pushState({ pantalla: "reproductor" }, "");
+    return;
+  }
   pantallaEnHistorial = false;
   cerrarReproductor();
   mostrarPantalla("biblioteca");
@@ -663,7 +671,12 @@ botonGuardar.addEventListener("click", async () => {
       acordes: datos.acordes,
       pulsos: listaDeTiempos(datos.pulsos),       // undefined si el JSON es viejo
       compases: listaDeTiempos(datos.compases),
-      ajuste: 0,
+      // Si es un JSON exportado de una canción editada: correcciones y análisis original.
+      acordesOriginales: Array.isArray(datos.acordesOriginales) ? datos.acordesOriginales : null,
+      editada: Array.isArray(datos.acordesOriginales) && datos.editada === true,
+      // Preferencias exportadas con la canción (si vienen y son válidas).
+      ...preferenciasImportadas(datos),
+      ajuste: typeof datos.ajuste === "number" ? Math.round(datos.ajuste * 10) / 10 : 0,
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
     }, mp3Elegido, inputLista.value);   // si hay lista, se agrega en la misma operación
@@ -681,6 +694,17 @@ botonGuardar.addEventListener("click", async () => {
   revisarFormulario();
   volverABiblioteca();
 });
+
+// De un JSON exportado por la app, toma solo las preferencias válidas
+// (velocidad, transporte, cejilla y afinación dentro de sus rangos).
+function preferenciasImportadas(datos) {
+  const resultado = {};
+  if ([0.5, 0.75, 1, 1.25, 1.5, 2].includes(datos.velocidad)) resultado.velocidad = datos.velocidad;
+  if (Number.isInteger(datos.transporte) && Math.abs(datos.transporte) <= 6) resultado.transporte = datos.transporte;
+  if (Number.isInteger(datos.cejilla) && datos.cejilla >= 0 && datos.cejilla <= 9) resultado.cejilla = datos.cejilla;
+  if ([0, -1, -2].includes(datos.afinacion)) resultado.afinacion = datos.afinacion;
+  return resultado;
+}
 
 /* ==================================================================
    Análisis en el celular, con barra de progreso
@@ -733,6 +757,7 @@ async function abrirCancion(id, contexto = { tipo: "todas" }) {
 // Carga los datos y el mp3 de una canción en el reproductor.
 // Devuelve false si no se pudo.
 async function cargarCancion(id) {
+  terminarEdicion();   // por si se estaba editando otra canción (editor.js)
   let cancion, mp3;
   try {
     [cancion, mp3] = await Promise.all([obtenerCancion(id), obtenerAudio(id)]);
@@ -767,6 +792,7 @@ async function cargarCancion(id) {
 
   mostrarTitulo();
   mostrarOpcionesAcordes();
+  mostrarOpcionesCancion();   // "Restaurar análisis original" (editor.js)
   tiempoTotal.textContent = "0:00";
   barraTiempo.value = 0;
   acordeActual.textContent = "–";
@@ -821,7 +847,11 @@ formLista.addEventListener("submit", async (evento) => {
 
 botonReanalizar.addEventListener("click", async () => {
   if (idActual === null) return;
-  if (!confirm("¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.")) return;
+  // Si la canción tiene acordes corregidos a mano, se avisa que se pierden.
+  const pregunta = cancionActual && cancionActual.editada
+    ? "Esta canción tiene acordes corregidos a mano.\nSi la volvés a analizar, se pierden esos cambios. ¿Seguir?"
+    : "¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.";
+  if (!confirm(pregunta)) return;
 
   const id = idActual;
   audio.pause();
@@ -1398,16 +1428,21 @@ function prepararPulsos(cancion) {
   esCompas = pulsos.map(() => false);
   for (const c of compases) esCompas[masCercano(pulsos, c)] = true;
 
-  // Acorde de cada pulso: el que suena en la mitad del pulso (así no importa
-  // si el cambio de acorde quedó redondeado unos milisegundos antes o después).
+  calcularAcordesPorPulso();
+
+  indicePulso = -1;
+  dibujarTira();
+}
+
+// Acorde de cada pulso: el que suena en la mitad del pulso (así no importa
+// si el cambio de acorde quedó redondeado unos milisegundos antes o después).
+// Se vuelve a calcular cada vez que el editor cambia los acordes.
+function calcularAcordesPorPulso() {
   acordePorPulso = pulsos.map((inicio, i) => {
     const fin = i + 1 < pulsos.length ? pulsos[i + 1] : inicio + (inicio - pulsos[i - 1]);
     const k = buscarIndice((inicio + fin) / 2);
     return k >= 0 ? acordes[k].acorde : "N";
   });
-
-  indicePulso = -1;
-  dibujarTira();
 }
 
 // Un casillero por pulso. El nombre del acorde va solo donde cambia, y los
@@ -1427,12 +1462,14 @@ function dibujarTira() {
     tira.appendChild(celda);
   });
   tira.scrollLeft = 0;
+  marcarSeleccion();   // en modo edición, vuelve a pintar los pulsos elegidos (editor.js)
 }
 
 // Tocar un casillero salta a ese pulso (sumando el ajuste, para que coincida).
+// En modo edición, tocar sirve para elegir pulsos (lo maneja editor.js).
 tira.addEventListener("click", (evento) => {
   const celda = evento.target.closest(".pulso");
-  if (!celda || idActual === null) return;
+  if (!celda || idActual === null || editando) return;
   audio.currentTime = Math.max(0, pulsos[Number(celda.dataset.indice)] + ajuste);
   actualizar();
 });

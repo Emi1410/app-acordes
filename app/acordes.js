@@ -25,12 +25,46 @@ const NOTAS_ACORDE = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#"
 const SEMITONO_LETRA = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
 // Formas de escribir el tipo de acorde que aceptamos, y a qué tipo equivalen.
+// Los cuatro primeros tienen posiciones propias (abajo); el resto sale de
+// chords-db (app/acordes-extra.js).
 const TIPOS_EQUIVALENTES = {
   "": "", "M": "", "maj": "",
   "m": "m", "min": "m", "-": "m",
   "7": "7", "dom7": "7",
   "m7": "m7", "min7": "m7", "-7": "m7",
+  "5": "5",
+  "dim": "dim", "°": "dim", "o": "dim",
+  "dim7": "dim7", "°7": "dim7", "o7": "dim7",
+  "aug": "aug", "+": "aug",
+  "sus2": "sus2", "sus4": "sus4", "sus": "sus4", "7sus4": "7sus4", "7sus": "7sus4",
+  "6": "6", "m6": "m6", "69": "69", "6add9": "69",
+  "9": "9", "m9": "m9",
+  "maj7": "maj7", "M7": "maj7", "Δ7": "maj7", "7M": "maj7",
+  "maj9": "maj9", "add9": "add9", "madd9": "madd9", "add11": "add11",
+  "m7b5": "m7b5", "ø": "m7b5", "ø7": "m7b5",
+  "mmaj7": "mmaj7", "mM7": "mmaj7", "m(maj7)": "mmaj7",
+  "7b5": "7b5", "aug7": "aug7", "7#5": "aug7", "+7": "aug7",
+  "7b9": "7b9", "7#9": "7#9", "11": "11", "m11": "m11", "13": "13",
 };
+
+// Tipos que se ofrecen en el editor de acordes, con su descripción.
+const TIPOS_DE_ACORDE = [
+  { tipo: "", nombre: "Mayor" }, { tipo: "m", nombre: "Menor" },
+  { tipo: "7", nombre: "7" }, { tipo: "m7", nombre: "m7" },
+  { tipo: "maj7", nombre: "maj7" }, { tipo: "5", nombre: "5 (power)" },
+  { tipo: "sus2", nombre: "sus2" }, { tipo: "sus4", nombre: "sus4" },
+  { tipo: "7sus4", nombre: "7sus4" }, { tipo: "add9", nombre: "add9" },
+  { tipo: "madd9", nombre: "madd9" }, { tipo: "6", nombre: "6" },
+  { tipo: "m6", nombre: "m6" }, { tipo: "9", nombre: "9" },
+  { tipo: "m9", nombre: "m9" }, { tipo: "dim", nombre: "dim" },
+  { tipo: "dim7", nombre: "dim7" }, { tipo: "m7b5", nombre: "m7b5" },
+  { tipo: "aug", nombre: "aug" }, { tipo: "mmaj7", nombre: "mmaj7" },
+  { tipo: "69", nombre: "69" }, { tipo: "maj9", nombre: "maj9" },
+  { tipo: "add11", nombre: "add11" }, { tipo: "11", nombre: "11" },
+  { tipo: "m11", nombre: "m11" }, { tipo: "13", nombre: "13" },
+  { tipo: "7b5", nombre: "7b5" }, { tipo: "aug7", nombre: "aug7" },
+  { tipo: "7b9", nombre: "7b9" }, { tipo: "7#9", nombre: "7#9" },
+];
 
 // Posiciones abiertas (con cuerdas al aire), solo para los acordes que las tienen.
 const ACORDES_ABIERTOS = {
@@ -80,23 +114,32 @@ const FORMAS_CEJILLA = {
   ],
 };
 
-/**
- * Traduce cualquier forma de escribir un acorde a la forma "oficial" de la
- * biblioteca: raíz con sostenido + tipo. Ejemplos:
- *   "Ab" -> "G#",  "Dbm" -> "C#m",  "Bbmin7" -> "A#m7",  "C#m" -> "C#m".
- * Devuelve null si no es un acorde que la biblioteca conozca.
- */
-function normalizarAcorde(nombre) {
-  const partes = /^([A-G])(#|b)?(.*)$/.exec(String(nombre).trim());
-  if (!partes) return null;
-  const [, letra, alteracion, tipoEscrito] = partes;
-  if (!(tipoEscrito in TIPOS_EQUIVALENTES)) return null;
-
+// Semitono de una nota escrita como letra + alteración ("Bb" -> 10, "C#" -> 1).
+// El "+ 12" evita números negativos (por ejemplo Cb = -1 -> 11 = B).
+function semitonoDeNota(letra, alteracion) {
   let semitono = SEMITONO_LETRA[letra];
   if (alteracion === "#") semitono += 1;
   if (alteracion === "b") semitono -= 1;
-  // El "+ 12" evita números negativos (por ejemplo Cb = -1 -> 11 = B).
-  return { raiz: (semitono + 12) % 12, tipo: TIPOS_EQUIVALENTES[tipoEscrito] };
+  return (semitono + 12) % 12;
+}
+
+/**
+ * Lee un nombre de acorde y lo separa en raíz, tipo y bajo (si tiene).
+ *   "Ab"     -> { raiz: 8, tipo: "",     bajo: null }
+ *   "Bbmin7" -> { raiz: 10, tipo: "m7",  bajo: null }
+ *   "D/F#"   -> { raiz: 2, tipo: "",     bajo: 6 }
+ * Devuelve null si no es un acorde que la biblioteca conozca.
+ */
+function normalizarAcorde(nombre) {
+  const partes = /^([A-G])(#|b)?(.*?)(?:\/([A-G])(#|b)?)?$/.exec(String(nombre).trim());
+  if (!partes) return null;
+  const [, letra, alteracion, tipoEscrito, letraBajo, alteracionBajo] = partes;
+  if (!(tipoEscrito in TIPOS_EQUIVALENTES)) return null;
+  return {
+    raiz: semitonoDeNota(letra, alteracion),
+    tipo: TIPOS_EQUIVALENTES[tipoEscrito],
+    bajo: letraBajo ? semitonoDeNota(letraBajo, alteracionBajo) : null,
+  };
 }
 
 /* ==================================================================
@@ -158,14 +201,19 @@ function transportarAcorde(nombre, semitonos, tonalidad) {
   if (nombre === "N") return "N";
   const acorde = normalizarAcorde(nombre);
   if (!acorde) return nombre;
-  const raiz = (((acorde.raiz + semitonos) % 12) + 12) % 12;
-  return nombresDeNotas(tonalidad)[raiz] + acorde.tipo;
+  const nombres = nombresDeNotas(tonalidad);
+  const mover = (nota) => (((nota + semitonos) % 12) + 12) % 12;
+  // En los acordes con bajo (D/F#) también se mueve el bajo.
+  const bajo = acorde.bajo === null ? "" : "/" + nombres[mover(acorde.bajo)];
+  return nombres[mover(acorde.raiz)] + acorde.tipo + bajo;
 }
 
-/** Nombre normalizado como texto: "Ab" -> "G#". */
+/** Nombre normalizado como texto (con sostenidos): "Ab" -> "G#", "D/Gb" -> "D/F#". */
 function nombreNormalizado(nombre) {
   const acorde = normalizarAcorde(nombre);
-  return acorde ? NOTAS_ACORDE[acorde.raiz] + acorde.tipo : null;
+  if (!acorde) return null;
+  const bajo = acorde.bajo === null ? "" : "/" + NOTAS_ACORDE[acorde.bajo];
+  return NOTAS_ACORDE[acorde.raiz] + acorde.tipo + bajo;
 }
 
 /**
@@ -196,7 +244,16 @@ function posicionesDeAcorde(nombre) {
   if (!clave) return [];
   if (cachePosiciones[clave]) return cachePosiciones[clave];
 
-  const { raiz, tipo } = normalizarAcorde(nombre);
+  const { raiz, tipo, bajo } = normalizarAcorde(nombre);
+
+  // Los demás tipos (sus4, maj7, D/F#...) salen de chords-db (acordes-extra.js),
+  // que ya viene ordenado con las posiciones abiertas primero.
+  if (bajo !== null || !FORMAS_CEJILLA[tipo]) {
+    const extra = typeof POSICIONES_EXTRA !== "undefined" ? POSICIONES_EXTRA[clave] : null;
+    cachePosiciones[clave] = extra || [];
+    return cachePosiciones[clave];
+  }
+
   const abiertas = ACORDES_ABIERTOS[clave] || [];
   const cejillas = FORMAS_CEJILLA[tipo]
     .map((forma) => moverForma(forma, raiz))

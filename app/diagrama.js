@@ -113,7 +113,9 @@ function dibujarDiagrama(posicion) {
       rx: 6.5,
       class: "punto",
     }, svg);
-    crearTexto("1", (xCuerda(cejilla.desde) + xCuerda(cejilla.hasta)) / 2, y, "dedo", svg);
+    // Casi siempre la hace el índice (1), pero en algunas posiciones es otro dedo.
+    const dedoCejilla = posicion.dedos[cejilla.desde] || 1;
+    crearTexto(String(dedoCejilla), (xCuerda(cejilla.desde) + xCuerda(cejilla.hasta)) / 2, y, "dedo", svg);
   }
 
   // Puntos con el número de dedo. Los que ya cubre la cejilla no se repiten.
