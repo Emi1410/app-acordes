@@ -1074,7 +1074,7 @@ body {
 .hoja-contenido {
   display: flex;
   flex-direction: column;
-  gap: 10px;              /* compacto: que entre todo sin desplazarse */
+  gap: 8px;               /* compacto: que entre todo sin desplazarse */
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
 }
 
@@ -1214,12 +1214,12 @@ body {
   accent-color: var(--acento);
 }
 
-/* Casilla para "Reproducción continua" */
+/* Casillas ("Reproducir al abrir", "Reproducción continua") */
 .interruptor {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 40px;
+  min-height: 34px;
   font-weight: 600;
   cursor: pointer;
 }

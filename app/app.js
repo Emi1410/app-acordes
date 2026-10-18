@@ -831,7 +831,10 @@ let contextoActual = { tipo: "todas" };
 // Abre una canción de la biblioteca en el reproductor.
 async function abrirCancion(id, contexto = { tipo: "todas" }) {
   contextoActual = contexto;
-  if (await cargarCancion(id)) abrirPantalla("reproductor");
+  if (!(await cargarCancion(id))) return;
+  abrirPantalla("reproductor");
+  // Opción del panel "Más": que arranque sola al abrirla.
+  if (reproducirAlAbrir) reproducirCancion();
 }
 
 // Carga los datos y el mp3 de una canción en el reproductor.
@@ -866,8 +869,13 @@ async function cargarCancion(id) {
   // Creamos una URL temporal que apunta al mp3 guardado y se la damos al reproductor.
   reiniciarMetronomo();
   audio.src = URL.createObjectURL(mp3);
-  // Velocidad guardada para esta canción. Hay que ponerla DESPUÉS de cambiar
-  // el src, porque al cargar un audio nuevo el navegador la vuelve a x1.
+  // load() fuerza a empezar de cero con el audio nuevo. En algunos celulares,
+  // sin esto el reproductor podía quedar en el estado "terminado" de antes
+  // (posición al final), y recién al tocar play volvía al principio.
+  audio.load();
+  recienAbierta = true;
+  // Velocidad guardada para esta canción. Hay que ponerla DESPUÉS de cargar,
+  // porque al cargar un audio nuevo el navegador la vuelve a x1.
   aplicarVelocidad(cancion.velocidad || 1);
 
   mostrarTitulo();
@@ -1087,18 +1095,21 @@ const valorVelocidad = document.getElementById("valor-velocidad");
 const volumenCancionControl = document.getElementById("volumen-cancion");
 const volumenMetronomoControl = document.getElementById("volumen-metronomo");
 const reproduccionContinuaControl = document.getElementById("reproduccion-continua");
+const reproducirAlAbrirControl = document.getElementById("reproducir-al-abrir");
 
 // Preferencias generales (no dependen de la canción), guardadas en el navegador.
 let metronomoPrendido = false;
 let volumenMetronomo = 0.7;
 let volumenCancion = 1;
 let reproduccionContinua = false;
+let reproducirAlAbrir = false;     // que la canción arranque sola al abrirla
 try {
   const guardadas = JSON.parse(localStorage.getItem("preferenciasReproductor")) || {};
   metronomoPrendido = guardadas.metronomoPrendido === true;
   if (typeof guardadas.volumenMetronomo === "number") volumenMetronomo = guardadas.volumenMetronomo;
   if (typeof guardadas.volumenCancion === "number") volumenCancion = guardadas.volumenCancion;
   reproduccionContinua = guardadas.reproduccionContinua === true;
+  reproducirAlAbrir = guardadas.reproducirAlAbrir === true;
 } catch {
   // sin localStorage: valores por defecto
 }
@@ -1106,7 +1117,7 @@ try {
 function guardarPreferencias() {
   try {
     localStorage.setItem("preferenciasReproductor", JSON.stringify({
-      metronomoPrendido, volumenMetronomo, volumenCancion, reproduccionContinua,
+      metronomoPrendido, volumenMetronomo, volumenCancion, reproduccionContinua, reproducirAlAbrir,
     }));
   } catch {
     // no es grave: solo no se recuerda
@@ -1152,6 +1163,10 @@ function aplicarVolumenCancion() {
 
 function reproducirCancion() {
   asegurarAudio();
+  // Si quedó en el final (terminó, o el celular la dejó ahí), arranca desde 0:00.
+  if (audio.ended || (isFinite(audio.duration) && audio.currentTime >= audio.duration - 0.05)) {
+    audio.currentTime = 0;
+  }
   audio.play().catch(() => {});
 }
 
@@ -1318,6 +1333,11 @@ volumenMetronomoControl.addEventListener("input", () => {
   guardarPreferencias();
 });
 
+reproducirAlAbrirControl.addEventListener("change", () => {
+  reproducirAlAbrir = reproducirAlAbrirControl.checked;
+  guardarPreferencias();
+});
+
 reproduccionContinuaControl.addEventListener("change", () => {
   reproduccionContinua = reproduccionContinuaControl.checked;
   guardarPreferencias();
@@ -1335,6 +1355,7 @@ function mostrarPreferencias() {
   volumenCancionControl.value = volumenCancion;
   volumenMetronomoControl.value = volumenMetronomo;
   reproduccionContinuaControl.checked = reproduccionContinua;
+  reproducirAlAbrirControl.checked = reproducirAlAbrir;
   mostrarMetronomo();
   aplicarVolumenCancion();
 }
@@ -1858,12 +1879,27 @@ audio.addEventListener("pause", () => {
   actualizar();
 });
 
-// Cuando el navegador ya sabe cuánto dura la canción, configuramos la barra.
-audio.addEventListener("loadedmetadata", () => {
+// true desde que se abre una canción hasta que el navegador sabe cuánto dura.
+let recienAbierta = false;
+
+// Cuando el navegador sabe (o corrige) cuánto dura la canción, configuramos
+// la barra. Algunos celulares informan la duración tarde, o primero como
+// infinita, por eso escuchamos también "durationchange".
+function alConocerDuracion() {
+  if (!isFinite(audio.duration)) return;
   barraTiempo.max = audio.duration;
   tiempoTotal.textContent = formatoTiempo(audio.duration);
+  // Una canción recién abierta que quedó EN EL FINAL (lo que pasaba en algunos
+  // celulares) vuelve a 0:00, lista para tocar play. Si quedó en otro lugar es
+  // porque alguien lo eligió (por ejemplo, tocó un pulso enseguida): se respeta.
+  if (recienAbierta) {
+    recienAbierta = false;
+    if (audio.paused && (audio.ended || audio.currentTime >= audio.duration - 0.5)) audio.currentTime = 0;
+  }
   actualizar();
-});
+}
+audio.addEventListener("loadedmetadata", alConocerDuracion);
+audio.addEventListener("durationchange", alConocerDuracion);
 
 // Después de saltar a otro momento (por la barra o la lista), refrescamos.
 audio.addEventListener("seeked", actualizar);

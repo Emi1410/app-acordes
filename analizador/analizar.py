@@ -121,16 +121,33 @@ def detectar_pulsos(y_percusiva, sr):
 # 3. Cromagrama
 # ---------------------------------------------------------------------------
 
-def calcular_cromagrama(y_armonica, sr):
+def calcular_cromagrama(y_armonica, sr, corregir_afinacion=True):
     """
     Calcula el cromagrama: para cada frame, cuánta energía tiene cada una de
     las 12 notas (sin importar la octava). Es una matriz de 12 filas x N frames.
     Usamos la parte armónica (sin batería) para que los golpes no ensucien las notas.
     También devuelve el volumen (RMS) de cada frame, para detectar silencios.
+
+    corregir_afinacion: si la grabación está un poco desafinada respecto de
+    La = 440 Hz (por ejemplo, la banda afinó "entre medio" de dos notas),
+    librosa estima cuánto y corre las notas para compensar (tuning=None).
+    Con False se supone afinación perfecta (tuning=0).
     """
-    croma = librosa.feature.chroma_cqt(y=y_armonica, sr=sr)
+    croma = librosa.feature.chroma_cqt(y=y_armonica, sr=sr, tuning=None if corregir_afinacion else 0.0)
     rms = librosa.feature.rms(y=y_armonica)
     return croma, rms
+
+
+def subdividir_pulsos(frames_pulsos):
+    """
+    Agrega un punto en la mitad de cada pulso: así el análisis se hace cada
+    medio pulso y no se pierden los acordes de paso que duran un solo tiempo.
+    """
+    frames_pulsos = np.asarray(frames_pulsos)
+    if len(frames_pulsos) < 2:
+        return frames_pulsos
+    medios = (frames_pulsos[:-1] + frames_pulsos[1:]) // 2
+    return np.unique(np.concatenate([frames_pulsos, medios]))
 
 
 def promediar_por_pulso(croma, rms, sr, frames_pulsos):
@@ -299,9 +316,10 @@ def agrupar(acordes):
     return tramos
 
 
-def suavizar(acordes):
+def suavizar(acordes, minimo=MINIMO_PULSOS):
     """
-    Elimina los cambios de acorde "sueltos" que duran menos de MINIMO_PULSOS.
+    Elimina los cambios de acorde "sueltos" que duran menos de "minimo" unidades
+    (MINIMO_PULSOS pulsos, o el doble si se analiza a medio pulso).
 
     Esos tramos tan cortos suelen ser errores (una nota de paso, un golpe de
     batería, etc.). Cada uno se reemplaza por el acorde del tramo anterior
@@ -313,7 +331,7 @@ def suavizar(acordes):
         tramos = agrupar(acordes)
         if len(tramos) < 2:
             return acordes
-        cortos = [k for k, t in enumerate(tramos) if t[2] < MINIMO_PULSOS]
+        cortos = [k for k, t in enumerate(tramos) if t[2] < minimo]
         if not cortos:
             return acordes
 
@@ -325,7 +343,79 @@ def suavizar(acordes):
             acordes[i] = vecino[0]
 
 
-def agregar_septimas(tramos, croma_pulsos):
+# Parámetros del suavizado de Viterbi (ver suavizar_viterbi). Elegidos con
+# pruebas/medir_precision.py: con nitidez 40 el resultado casi no cambia
+# aunque la probabilidad de cambio vaya de 0.06 a 0.25 o la preferencia por
+# la tonalidad de 1 a 3, así que no dependen de esta canción en particular.
+NITIDEZ_VITERBI = 40.0          # cuánto pesa el parecido con cada acorde
+PROBABILIDAD_CAMBIO = 0.12      # chance de cambiar de acorde en cada pulso
+PREFERENCIA_TONALIDAD = 3.0     # cuántas veces más probable es cambiar a un acorde de la tonalidad
+
+
+def suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso=1):
+    """
+    Elige los acordes con el algoritmo de Viterbi, en lugar de elegir cada
+    pulso por separado y después "borrar" los tramos cortos.
+
+    Piensa la canción como una cadena: en cada pulso suena uno de los 24
+    acordes. Busca la secuencia completa más probable combinando:
+      - cuánto se parece cada pulso a cada acorde (similitud coseno), y
+      - un "costo" por cambiar de acorde: quedarse en el mismo es lo más
+        probable, y cambiar a un acorde de la tonalidad es más probable que
+        cambiar a uno de afuera.
+    Así, un acorde corto pero claro se mantiene (el parecido le gana al costo
+    de cambiar), mientras que un pulso dudoso no alcanza para cambiar.
+    Devuelve una lista de (raiz, tipo) por unidad, o None en los silencios.
+    """
+    candidatos = [(raiz, tipo) for raiz in range(12) for tipo in ("", "m")]
+    plantillas = np.array([plantilla(raiz, tipo) for raiz, tipo in candidatos])
+    similitudes = plantillas @ normalizar(croma_unidades)          # 24 x N
+    emision = NITIDEZ_VITERBI * similitudes                         # log-probabilidades (sin normalizar)
+
+    # Transiciones: la probabilidad de cambio es por pulso; si analizamos a
+    # medio pulso, cada mitad tiene la mitad de chance de cambiar.
+    p_cambio = PROBABILIDAD_CAMBIO / unidades_por_pulso
+    en_tono = np.array([PREFERENCIA_TONALIDAD if pertenece_a_tonalidad(r, t, tonalidad) else 1.0
+                        for r, t in candidatos])
+    transicion = np.zeros((24, 24))
+    for origen in range(24):
+        pesos = en_tono.copy()
+        pesos[origen] = 0
+        transicion[origen] = p_cambio * pesos / pesos.sum()
+        transicion[origen, origen] = 1 - p_cambio
+    log_transicion = np.log(transicion)
+
+    # Viterbi: para cada pulso y cada acorde, el mejor camino que termina ahí.
+    n = croma_unidades.shape[1]
+    puntaje = emision[:, 0].copy()
+    desde = np.zeros((24, n), dtype=int)
+    for i in range(1, n):
+        opciones = puntaje[:, None] + log_transicion                  # 24 (origen) x 24 (destino)
+        desde[:, i] = np.argmax(opciones, axis=0)
+        puntaje = opciones[desde[:, i], np.arange(24)] + emision[:, i]
+
+    # Recorremos el mejor camino de atrás para adelante.
+    camino = [int(np.argmax(puntaje))]
+    for i in range(n - 1, 0, -1):
+        camino.append(int(desde[camino[-1], i]))
+    camino.reverse()
+
+    volumen_tipico = np.median(rms_unidades)
+    acordes = [None if rms_unidades[i] < UMBRAL_SILENCIO * volumen_tipico else candidatos[k]
+               for i, k in enumerate(camino)]
+
+    # La tercera dudosa se corrige por TRAMO (con el perfil promedio, más confiable).
+    for acorde, inicio, largo in agrupar(acordes):
+        if acorde is None:
+            continue
+        perfil = croma_unidades[:, inicio:inicio + largo].mean(axis=1)
+        tipo = corregir_tercera(perfil, acorde[0], acorde[1], tonalidad)
+        for i in range(inicio, inicio + largo):
+            acordes[i] = (acorde[0], tipo)
+    return acordes
+
+
+def agregar_septimas(tramos, croma_pulsos, unidades_por_pulso=1):
     """
     Decide para cada tramo (no para cada pulso) si el acorde lleva séptima.
 
@@ -354,7 +444,8 @@ def agregar_septimas(tramos, croma_pulsos):
         parecido_septima = plantilla(raiz, tipo_septima) @ perfil_normalizado
         septima = perfil[(raiz + 10) % 12]
 
-        if (largo >= MINIMO_PULSOS_SEPTIMA
+        # "largo" está en unidades (pulsos o medios pulsos): lo pasamos a pulsos.
+        if (largo >= MINIMO_PULSOS_SEPTIMA * unidades_por_pulso
                 and parecido_septima > parecido_triada
                 and septima >= UMBRAL_SEPTIMA * energia_base(perfil, raiz)):
             tipo = tipo_septima
@@ -448,6 +539,66 @@ def guardar_json(nombre, tempo, tonalidad, tramos, pulsos, compases):
     return ruta
 
 
+# Opciones del análisis (se pueden combinar; ver analizar_audio).
+#
+# Lo que se usa: medido con pruebas/medir_precision.py sobre canciones/Prueba.mp3
+# comparando con el cifrado real (F1: 90,4 % -> 93,0 %, y 6 veces más rápido):
+#   - afinacion: sí. En la canción afinada no cambia nada, pero con la misma
+#     canción desafinada 0,4 semitonos sube el F1 de 66,7 % a 78,8 %.
+#   - hpss: no. Separar la batería no mejoró (con Viterbi, 92,6 % contra
+#     93,0 % sin separar) y es lo que más tarda (unos 25 s).
+#   - suavizado Viterbi: sí. Recupera acordes cortos que la mediana borraba
+#     (la cobertura del cifrado sube de 84,7 % a 90,1 %).
+#   - medio_pulso: no. Solo, empeora (88,0 %), y junto con Viterbi no suma.
+OPCIONES_PREDETERMINADAS = {"afinacion": True, "hpss": False, "suavizado": "viterbi", "medio_pulso": False}
+
+# Las de la versión anterior, para poder comparar.
+OPCIONES_ORIGINALES = {"afinacion": True, "hpss": True, "suavizado": "mediana", "medio_pulso": False}
+
+
+def analizar_audio(y, sr, opciones=None):
+    """
+    Analiza el audio con las opciones indicadas y devuelve un diccionario con
+    tempo, tonalidad, tramos (acordes), tiempos de los pulsos y compases.
+      afinacion:   corregir la desafinación de la grabación antes del cromagrama.
+      hpss:        separar batería y parte armónica antes de analizar.
+      suavizado:   "mediana" (absorber tramos cortos) o "viterbi".
+      medio_pulso: analizar cada medio pulso en vez de cada pulso.
+    Lo que no se indica se toma de OPCIONES_PREDETERMINADAS.
+    """
+    opciones = {**OPCIONES_PREDETERMINADAS, **(opciones or {})}
+
+    # Separamos el audio en parte armónica (instrumentos con notas) y
+    # percusiva (batería). Cada una se usa para lo que mejor sirve.
+    if opciones["hpss"]:
+        y_armonica, y_percusiva = librosa.effects.hpss(y)
+    else:
+        y_armonica = y_percusiva = y
+
+    tempo, frames_pulsos = detectar_pulsos(y_percusiva, sr)
+    croma, rms = calcular_cromagrama(y_armonica, sr, opciones["afinacion"])
+    tonalidad = estimar_tonalidad(croma)
+
+    # Unidades de análisis: pulsos, o medios pulsos.
+    unidades_por_pulso = 2 if opciones["medio_pulso"] else 1
+    frames_unidades = subdividir_pulsos(frames_pulsos) if opciones["medio_pulso"] else frames_pulsos
+    croma_unidades, rms_unidades, tiempos = promediar_por_pulso(croma, rms, sr, frames_unidades)
+
+    if opciones["suavizado"] == "viterbi":
+        acordes = suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso)
+    else:
+        acordes = elegir_acordes(croma_unidades, rms_unidades, tonalidad)
+        acordes = suavizar(acordes, MINIMO_PULSOS * unidades_por_pulso)
+    tramos = agregar_septimas(agrupar(acordes), croma_unidades, unidades_por_pulso)
+    tramos = armar_tramos(tramos, tiempos)
+
+    # Pulsos en segundos y en qué pulsos empieza cada compás.
+    tiempos_pulsos = librosa.frames_to_time(frames_pulsos, sr=sr)
+    compases = calcular_compases(tiempos_pulsos, tramos)
+    return {"tempo": tempo, "tonalidad": tonalidad, "tramos": tramos,
+            "tiempos_pulsos": tiempos_pulsos, "compases": compases}
+
+
 def main():
     # Leemos la ruta del mp3 desde la línea de comandos.
     parser = argparse.ArgumentParser(description="Detecta los acordes de un mp3.")
@@ -462,26 +613,10 @@ def main():
     print(f"Cargando {ruta_mp3.name}...")
     y, sr = cargar_audio(ruta_mp3)
 
-    # Separamos el audio en parte armónica (instrumentos con notas) y
-    # percusiva (batería). Cada una se usa para lo que mejor sirve.
-    y_armonica, y_percusiva = librosa.effects.hpss(y)
-
-    print("Detectando pulsos...")
-    tempo, frames_pulsos = detectar_pulsos(y_percusiva, sr)
-
-    print("Analizando acordes...")
-    croma, rms = calcular_cromagrama(y_armonica, sr)
-    tonalidad = estimar_tonalidad(croma)
-    croma_pulsos, rms_pulsos, tiempos = promediar_por_pulso(croma, rms, sr, frames_pulsos)
-
-    acordes = elegir_acordes(croma_pulsos, rms_pulsos, tonalidad)
-    acordes = suavizar(acordes)
-    tramos = agregar_septimas(agrupar(acordes), croma_pulsos)
-    tramos = armar_tramos(tramos, tiempos)
-
-    # Pulsos en segundos y en qué pulsos empieza cada compás.
-    tiempos_pulsos = librosa.frames_to_time(frames_pulsos, sr=sr)
-    compases = calcular_compases(tiempos_pulsos, tramos)
+    print("Analizando...")
+    resultado = analizar_audio(y, sr)
+    tempo, tonalidad, tramos = resultado["tempo"], resultado["tonalidad"], resultado["tramos"]
+    tiempos_pulsos, compases = resultado["tiempos_pulsos"], resultado["compases"]
 
     ruta_json = guardar_json(nombre, tempo, tonalidad, tramos, tiempos_pulsos, compases)
 

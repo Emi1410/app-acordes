@@ -58,6 +58,15 @@ function codigoAnalizador() {
   const UMBRAL_SEPTIMA = 0.8;
   const MINIMO_PULSOS_SEPTIMA = 4;
 
+  // Suavizado de Viterbi (ver suavizarViterbi). Los mismos parámetros que
+  // analizar.py, salvo la nitidez, que depende de cómo es el cromagrama.
+  const NITIDEZ_VITERBI = 40;
+  const PROBABILIDAD_CAMBIO = 0.12;
+  const PREFERENCIA_TONALIDAD = 3;
+
+  // Lo que se usa si no se pide otra cosa (elegido con pruebas/medir_precision.py).
+  const OPCIONES_PREDETERMINADAS = { afinacion: true, mediana: true, suavizado: "viterbi", nitidez: NITIDEZ_VITERBI };
+
   const NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const INTERVALOS = { "": [0, 4, 7], "m": [0, 3, 7], "7": [0, 4, 7, 10], "m7": [0, 3, 7, 10] };
   const CON_SEPTIMA = { "": "7", "m": "m7" };
@@ -74,10 +83,10 @@ function codigoAnalizador() {
      Comunicación con la página
      ---------------------------------------------------------------- */
 
-  // Recibe las muestras (22050 Hz, mono) y el nombre; responde con el JSON.
+  // Recibe las muestras (22050 Hz, mono), el nombre y las opciones; responde con el JSON.
   self.onmessage = (evento) => {
     try {
-      const datos = analizar(evento.data.muestras, evento.data.nombre);
+      const datos = analizar(evento.data.muestras, evento.data.nombre, evento.data.opciones || {});
       self.postMessage({ tipo: "listo", datos });
     } catch (error) {
       self.postMessage({ tipo: "error", mensaje: error.message || String(error) });
@@ -92,8 +101,16 @@ function codigoAnalizador() {
   /* ----------------------------------------------------------------
      Análisis completo (mismo orden que main() en analizar.py)
      ---------------------------------------------------------------- */
-  function analizar(y, nombre) {
+  /*
+   * Opciones (las mismas ideas que analizar.py; ver pruebas/medir_precision.py):
+   *   afinacion: estimar la desafinación de la grabación y corregirla.
+   *   mediana:   filtro de mediana en el tiempo (borra golpes de batería del cromagrama).
+   *   suavizado: "viterbi" o "mediana" (absorber tramos cortos, como antes).
+   *   nitidez:   parámetro del Viterbi (cuánto pesa el parecido con cada acorde).
+   */
+  function analizar(y, nombre, opcionesPedidas) {
     if (y.length < SR) throw new Error("El audio es demasiado corto para analizarlo.");
+    const opciones = { ...OPCIONES_PREDETERMINADAS, ...opcionesPedidas };
 
     avisar("Buscando los pulsos", 0);
     const ataques = envolventeDeAtaques(y, (f) => avisar("Buscando los pulsos", 0.25 * f));
@@ -101,15 +118,22 @@ function codigoAnalizador() {
     const pulsos = seguirPulsos(ataques, tempo);
     avisar("Calculando las notas", 0.3);
 
-    const { croma, nFramesCroma } = cromagrama(y, (f) => avisar("Calculando las notas", 0.3 + 0.6 * f));
+    // Desafinación de la grabación, en semitonos (entre -0,5 y +0,5).
+    const afinacion = opciones.afinacion ? estimarAfinacion(y) : 0;
+    const { croma, nFramesCroma } = cromagrama(y, afinacion, opciones.mediana,
+      (f) => avisar("Calculando las notas", 0.32 + 0.58 * f));
     avisar("Eligiendo los acordes", 0.92);
 
     const tonalidad = estimarTonalidad(croma, nFramesCroma);
     const rms = volumenPorFrame(y);
     const { cromaPulsos, rmsPulsos, tiempos } = promediarPorPulso(croma, nFramesCroma, rms, pulsos);
 
-    let acordes = elegirAcordes(cromaPulsos, rmsPulsos, tonalidad);
-    acordes = suavizar(acordes);
+    let acordes;
+    if (opciones.suavizado === "viterbi") {
+      acordes = suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, opciones.nitidez);
+    } else {
+      acordes = suavizar(elegirAcordes(cromaPulsos, rmsPulsos, tonalidad));
+    }
     const tramos = armarTramos(agregarSeptimas(agrupar(acordes), cromaPulsos), tiempos);
 
     // Pulsos en segundos y en qué pulsos empieza cada compás.
@@ -491,7 +515,47 @@ function codigoAnalizador() {
   /* ----------------------------------------------------------------
      Cromagrama: energía de cada una de las 12 notas, frame a frame
      ---------------------------------------------------------------- */
-  function cromagrama(y, alAvance) {
+  /* ----------------------------------------------------------------
+     Desafinación de la grabación (como librosa.estimate_tuning)
+
+     Si la banda no afinó exactamente con La = 440 Hz, todas las notas
+     quedan corridas un poco. Buscamos los picos del espectro (las notas que
+     suenan), medimos cuánto se apartan de la nota más cercana y sacamos el
+     promedio. Como -0,5 y +0,5 semitonos son casi lo mismo (la mitad entre
+     dos notas), promediamos "en círculo" (con seno y coseno).
+     Devuelve la desafinación en semitonos, entre -0,5 y +0,5.
+     ---------------------------------------------------------------- */
+  function estimarAfinacion(y) {
+    const resolucion = SR / N_FFT_CROMA;
+    const kMin = Math.ceil(80 / resolucion);      // de 80 Hz...
+    const kMax = Math.floor(2000 / resolucion);   // ...a 2000 Hz: donde están las notas de la guitarra
+    let sumaSeno = 0, sumaCoseno = 0;
+    let frame = 0;
+    // Alcanza con 1 de cada 8 frames, y es 8 veces más rápido.
+    const salto = SALTO_CROMA * 8;
+    recorrerEspectro(y, N_FFT_CROMA, salto, kMax + 1, (t, mag) => {
+      frame++;
+      let maximo = 0;
+      for (let k = kMin; k <= kMax; k++) if (mag[k] > maximo) maximo = mag[k];
+      for (let k = kMin; k <= kMax; k++) {
+        const a = mag[k - 1], b = mag[k], c = mag[k + 1];
+        if (b < 0.1 * maximo || b <= a || b < c) continue;     // solo picos claros
+        // Interpolación parabólica: la frecuencia exacta del pico, entre dos bins.
+        const corrimiento = 0.5 * (a - c) / (a - 2 * b + c);
+        const frecuencia = (k + corrimiento) * resolucion;
+        const midi = 69 + 12 * Math.log2(frecuencia / 440);
+        const desvio = midi - Math.round(midi);                 // entre -0,5 y +0,5
+        sumaSeno += b * Math.sin(2 * Math.PI * desvio);
+        sumaCoseno += b * Math.cos(2 * Math.PI * desvio);
+      }
+    });
+    if (frame === 0 || (sumaSeno === 0 && sumaCoseno === 0)) return 0;
+    return Math.atan2(sumaSeno, sumaCoseno) / (2 * Math.PI);
+  }
+
+  // "afinacion": desafinación en semitonos (las notas se buscan corridas eso).
+  // "usarMediana": aplicar el filtro de mediana en el tiempo.
+  function cromagrama(y, afinacion, usarMediana, alAvance) {
     const resolucion = SR / N_FFT_CROMA;                       // Hz por bin (≈2,7)
     const nSemitonos = 12 * OCTAVAS_CROMA;                     // 84 semitonos desde C1
 
@@ -513,7 +577,8 @@ function codigoAnalizador() {
     const binesHasta = new Int32Array(nSemitonos);
     const pesoGraves = new Float64Array(nSemitonos);
     for (let s = 0; s < nSemitonos; s++) {
-      const centro = FMIN_CROMA * Math.pow(2, s / 12);
+      // Centro de cada semitono, corrido según la desafinación de la grabación.
+      const centro = FMIN_CROMA * Math.pow(2, (s + afinacion) / 12);
       let desde = Math.ceil(centro * Math.pow(2, -1 / 24) / resolucion);
       let hasta = Math.floor(centro * Math.pow(2, 1 / 24) / resolucion);
       if (hasta < desde) desde = hasta = Math.round(centro / resolucion);
@@ -536,7 +601,8 @@ function codigoAnalizador() {
 
     // Parte "armónica": mediana en el tiempo de cada semitono. Una nota
     // que dura se mantiene; un golpe de batería (muy corto) desaparece.
-    const radio = MEDIANA_ARMONICA >> 1;
+    // Sin la mediana, el radio es 0 y cada frame queda como está.
+    const radio = usarMediana ? MEDIANA_ARMONICA >> 1 : 0;
     const ventana = new Float32Array(MEDIANA_ARMONICA);
     const croma = new Float64Array(nFrames * 12);
     for (let s = 0; s < nSemitonos; s++) {
@@ -727,6 +793,78 @@ function codigoAnalizador() {
     return tramos;
   }
 
+  /*
+   * Suavizado de Viterbi (suavizar_viterbi en Python).
+   *
+   * Piensa la canción como una cadena: en cada pulso suena uno de los 24
+   * acordes. Busca la secuencia completa más probable combinando cuánto se
+   * parece cada pulso a cada acorde con un "costo" por cambiar de acorde
+   * (cambiar a uno de la tonalidad cuesta menos). Así, un acorde corto pero
+   * claro se mantiene, y un pulso dudoso no alcanza para cambiar.
+   * Devuelve un acorde por pulso como "raiz|tipo", o null en los silencios.
+   */
+  function suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, nitidez) {
+    const candidatos = [];
+    for (let raiz = 0; raiz < 12; raiz++) {
+      for (const tipo of ["", "m"]) candidatos.push({ raiz, tipo, plantilla: plantilla(raiz, tipo) });
+    }
+    const n = cromaPulsos.length;
+
+    // Transiciones: quedarse es lo más probable; cambiar, repartido entre los
+    // otros 23 acordes, con más peso para los de la tonalidad.
+    const enTono = candidatos.map((c) => (perteneceATonalidad(c.raiz, c.tipo, tonalidad) ? PREFERENCIA_TONALIDAD : 1));
+    const logTransicion = candidatos.map((_, origen) => {
+      const total = enTono.reduce((s, p, k) => s + (k === origen ? 0 : p), 0);
+      return enTono.map((p, destino) => (destino === origen
+        ? Math.log(1 - PROBABILIDAD_CAMBIO)
+        : Math.log(PROBABILIDAD_CAMBIO * p / total)));
+    });
+
+    // Para cada pulso y cada acorde, el puntaje del mejor camino que termina ahí.
+    let puntaje = candidatos.map((c) => nitidez * similitud(c.plantilla, cromaPulsos[0]));
+    const desde = [];
+    for (let i = 1; i < n; i++) {
+      const anterior = new Int32Array(24);
+      const nuevo = new Array(24);
+      for (let destino = 0; destino < 24; destino++) {
+        let mejor = -Infinity, mejorOrigen = 0;
+        for (let origen = 0; origen < 24; origen++) {
+          const p = puntaje[origen] + logTransicion[origen][destino];
+          if (p > mejor) { mejor = p; mejorOrigen = origen; }
+        }
+        anterior[destino] = mejorOrigen;
+        nuevo[destino] = mejor + nitidez * similitud(candidatos[destino].plantilla, cromaPulsos[i]);
+      }
+      desde.push(anterior);
+      puntaje = nuevo;
+    }
+
+    // Recorremos el mejor camino de atrás para adelante.
+    let k = puntaje.indexOf(Math.max(...puntaje));
+    const camino = [k];
+    for (let i = n - 1; i > 0; i--) {
+      k = desde[i - 1][k];
+      camino.push(k);
+    }
+    camino.reverse();
+
+    const volumenTipico = mediana(rmsPulsos);
+    const acordes = camino.map((indice, i) => (rmsPulsos[i] < UMBRAL_SILENCIO * volumenTipico
+      ? null : `${candidatos[indice].raiz}|${candidatos[indice].tipo}`));
+
+    // La tercera dudosa se corrige por TRAMO, con el perfil promedio (más confiable).
+    for (const [acorde, inicio, largo] of agrupar(acordes)) {
+      if (acorde === null) continue;
+      const [textoRaiz, tipo] = acorde.split("|");
+      const raiz = Number(textoRaiz);
+      const perfil = new Array(12).fill(0);
+      for (let i = inicio; i < inicio + largo; i++) for (let c = 0; c < 12; c++) perfil[c] += cromaPulsos[i][c] / largo;
+      const corregido = `${raiz}|${corregirTercera(perfil, raiz, tipo, tonalidad)}`;
+      for (let i = inicio; i < inicio + largo; i++) acordes[i] = corregido;
+    }
+    return acordes;
+  }
+
   // Absorbe los tramos de menos de MINIMO_PULSOS en el tramo vecino.
   function suavizar(acordes) {
     acordes = acordes.slice();
@@ -819,8 +957,10 @@ function crearWorkerAnalizador() {
  *
  *   alProgreso(fraccion, etapa): se llama a medida que avanza (0 a 1).
  *   senal: un AbortSignal opcional para cancelar el análisis.
+ *   opciones: para probar variantes del análisis (ver "analizar" en el
+ *     worker). Sin opciones se usa la configuración elegida con las pruebas.
  */
-async function analizarMp3(archivo, nombre, alProgreso = () => {}, senal = null) {
+async function analizarMp3(archivo, nombre, alProgreso = () => {}, senal = null, opciones = {}) {
   const cancelado = () => new DOMException("Análisis cancelado", "AbortError");
   if (senal && senal.aborted) throw cancelado();
 
@@ -856,6 +996,6 @@ async function analizarMp3(archivo, nombre, alProgreso = () => {}, senal = null)
     };
 
     // "Transferimos" las muestras en lugar de copiarlas: es instantáneo.
-    worker.postMessage({ muestras, nombre }, [muestras.buffer]);
+    worker.postMessage({ muestras, nombre, opciones }, [muestras.buffer]);
   });
 }
