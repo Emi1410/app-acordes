@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=2.2">
+  <link rel="stylesheet" href="style.css?v=2.3">
 </head>
 <body>
 
@@ -237,9 +237,8 @@
        Panel "Más": opciones del reproductor que se usan menos
        (sube desde abajo, sin apretar la pantalla principal)
        ============================================================== -->
-  <dialog id="panel-opciones" class="dialogo hoja">
+  <dialog id="panel-opciones" class="dialogo hoja" aria-label="Opciones del reproductor">
     <div class="hoja-contenido">
-      <h2>Opciones</h2>
 
       <!-- Acciones sobre la canción -->
       <div class="acciones-cancion">
@@ -285,6 +284,18 @@
           <option value="-2">1 tono abajo (D)</option>
         </select>
       </label>
+
+      <!-- Ajuste fino del metrónomo (por dispositivo), además de la demora medida -->
+      <div class="paso">
+        <span>Clic metrón.</span>
+        <button id="metronomo-antes" type="button" aria-label="Clic 10 ms antes">−</button>
+        <output id="valor-ajuste-metronomo">0 ms</output>
+        <button id="metronomo-despues" type="button" aria-label="Clic 10 ms después">+</button>
+      </div>
+      <div class="fila-demora">
+        <small id="texto-demora">Demora del audio: se mide al reproducir a x1</small>
+        <button id="boton-medir-demora" class="boton-lista boton-renombrar" type="button">Medir de nuevo</button>
+      </div>
 
       <label class="control-volumen">
         <span>Vol. canción</span>
@@ -365,12 +376,12 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=2.2"></script>
-  <script src="acordes.js?v=2.2"></script>
-  <script src="diagrama.js?v=2.2"></script>
-  <script src="biblioteca.js?v=2.2"></script>
-  <script src="analizador.js?v=2.2"></script>
-  <script src="app.js?v=2.2"></script>
-  <script src="editor.js?v=2.2"></script>
+  <script src="acordes-extra.js?v=2.3"></script>
+  <script src="acordes.js?v=2.3"></script>
+  <script src="diagrama.js?v=2.3"></script>
+  <script src="biblioteca.js?v=2.3"></script>
+  <script src="analizador.js?v=2.3"></script>
+  <script src="app.js?v=2.3"></script>
+  <script src="editor.js?v=2.3"></script>
 </body>
 </html>

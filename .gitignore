@@ -11,3 +11,6 @@ __pycache__/
 # Copias hechas a mano ("archivo - copia.txt", "archivo - copia", etc.)
 * - copia
 * - copia.*
+
+# Archivos comprimidos
+*.rar

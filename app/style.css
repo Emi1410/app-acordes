@@ -1074,7 +1074,7 @@ body {
 .hoja-contenido {
   display: flex;
   flex-direction: column;
-  gap: 8px;               /* compacto: que entre todo sin desplazarse */
+  gap: 7px;               /* compacto: que entre todo sin desplazarse */
   padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
 }
 
@@ -1091,8 +1091,23 @@ body {
 }
 
 .acciones-cancion .boton-chico {
+  min-height: 36px;
   padding: 0 8px;
   font-size: 0.88rem;
+}
+
+/* Demora del audio medida y botón para medirla de nuevo */
+.fila-demora {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--texto-suave);
+}
+
+.fila-demora .boton-lista {
+  flex: none;
+  min-height: 30px;
 }
 
 /* Fila con nombre a la izquierda y un control a la derecha (afinación) */
@@ -1105,7 +1120,7 @@ body {
 }
 
 .fila-opcion select {
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 10px;
   border: 1px solid var(--borde);
   border-radius: 12px;
@@ -1165,7 +1180,7 @@ body {
 
 .paso button {
   min-width: 48px;
-  min-height: 40px;
+  min-height: 36px;
   border: 1px solid var(--borde);
   border-radius: 12px;
   background: var(--fondo);

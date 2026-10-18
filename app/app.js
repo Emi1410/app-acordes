@@ -1129,6 +1129,7 @@ function guardarPreferencias() {
 let contextoAudio = null;
 let gananciaCancion = null;     // volumen de la canción
 let gananciaMetronomo = null;   // volumen del metrónomo
+let fuenteCancion = null;       // la canción dentro del contexto, antes de su volumen (para medir la demora)
 
 function asegurarAudio() {
   if (!contextoAudio) {
@@ -1140,9 +1141,9 @@ function asegurarAudio() {
     gananciaMetronomo.connect(contextoAudio.destination);
     // La canción (el <audio>) pasa a sonar a través del contexto.
     try {
-      const fuente = contextoAudio.createMediaElementSource(audio);
+      fuenteCancion = contextoAudio.createMediaElementSource(audio);
       gananciaCancion = contextoAudio.createGain();
-      fuente.connect(gananciaCancion).connect(contextoAudio.destination);
+      fuenteCancion.connect(gananciaCancion).connect(contextoAudio.destination);
     } catch {
       gananciaCancion = null;   // si falla, el volumen se maneja con audio.volume
     }
@@ -1171,12 +1172,178 @@ function reproducirCancion() {
 }
 
 /* ------------------------------------------------------------------
+   Demora del audio (se mide y se guarda por dispositivo)
+
+   El reproductor informa en audio.currentTime qué parte de la canción
+   está "entregando", pero ese audio tarda un poco en pasar al AudioContext
+   (Chrome lo junta en un buffer). En la compu son unos 157 ms; en cada
+   celular es distinto. Sin compensarlo, el clic del metrónomo sale antes
+   del golpe y la tira va adelantada.
+
+   Para medirlo escuchamos el audio que realmente pasa por el contexto y lo
+   comparamos con el mp3 decodificado: el corrimiento que mejor coincide es
+   la demora. Se mide sola la primera vez que suena una canción a x1, se
+   guarda en el navegador (vale para este dispositivo) y se puede volver a
+   medir desde el panel "Más".
+   ------------------------------------------------------------------ */
+
+const textoDemora = document.getElementById("texto-demora");
+const botonMedirDemora = document.getElementById("boton-medir-demora");
+const metronomoAntes = document.getElementById("metronomo-antes");
+const metronomoDespues = document.getElementById("metronomo-despues");
+const valorAjusteMetronomo = document.getElementById("valor-ajuste-metronomo");
+
+// Demora medida en milisegundos (null = todavía no se midió en este dispositivo)
+// y ajuste fino del metrónomo, también en milisegundos (+ = el clic suena más tarde).
+let demoraAudio = null;
+let ajusteMetronomo = 0;
+try {
+  const guardada = JSON.parse(localStorage.getItem("demoraAudio"));
+  if (guardada && typeof guardada.ms === "number") demoraAudio = guardada.ms;
+  const fino = Number(localStorage.getItem("ajusteMetronomo"));
+  if (isFinite(fino)) ajusteMetronomo = fino;
+} catch {
+  // sin localStorage: se mide en cada sesión
+}
+
+/**
+ * Posición de la canción que REALMENTE se está escuchando, en segundos.
+ *   conSalida: además resta la demora hasta el parlante (para la tira y los
+ *   diagramas, que tienen que coincidir con lo que se oye). El metrónomo no
+ *   la necesita: el clic sale por el mismo camino que la canción.
+ * En pausa no se resta nada: al dar play se escucha desde audio.currentTime.
+ * La demora es en tiempo real; a otra velocidad equivale a demora × velocidad
+ * de canción.
+ */
+function posicionQueSuena(conSalida) {
+  if (audio.paused || !gananciaCancion) return audio.currentTime;
+  let segundos = (demoraAudio || 0) / 1000;
+  if (conSalida && contextoAudio) segundos += contextoAudio.outputLatency || contextoAudio.baseLatency || 0;
+  return audio.currentTime - segundos * audio.playbackRate;
+}
+
+function mostrarDemora(texto) {
+  textoDemora.textContent = texto
+    || (demoraAudio === null ? "Demora del audio: se mide al reproducir a x1" : `Demora del audio: ${Math.round(demoraAudio)} ms`);
+  valorAjusteMetronomo.textContent = `${ajusteMetronomo > 0 ? "+" : ajusteMetronomo < 0 ? "−" : ""}${Math.abs(ajusteMetronomo)} ms`;
+  metronomoAntes.disabled = ajusteMetronomo <= -300;
+  metronomoDespues.disabled = ajusteMetronomo >= 300;
+}
+
+// Correlación normalizada entre "captura" y "cancion" desde la muestra "inicio",
+// mirando 1 de cada "paso" muestras.
+function parecido(captura, cancion, inicio, paso) {
+  let producto = 0, energiaA = 0, energiaB = 0;
+  for (let i = 0; i < captura.length; i += paso) {
+    const a = captura[i], b = cancion[inicio + i] || 0;
+    producto += a * b; energiaA += a * a; energiaB += b * b;
+  }
+  return producto / Math.sqrt(energiaA * energiaB + 1e-12);
+}
+
+let midiendoDemora = false;
+
+/**
+ * Mide la demora mientras suena la canción (a x1). Toma 8 muestras del audio
+ * que pasa por el contexto, busca en qué parte del mp3 están, y se queda con
+ * la mediana de los corrimientos (si al menos 4 coincidieron con claridad).
+ * Devuelve la demora en ms, o null si no se pudo medir.
+ */
+async function medirDemora() {
+  if (midiendoDemora || !fuenteCancion || audio.paused || audio.playbackRate !== 1 || idActual === null) return null;
+  midiendoDemora = true;
+  mostrarDemora("Demora del audio: midiendo…");
+  const id = idActual;
+  try {
+    // El mp3 a 22050 Hz y mono (la misma función que usa el analizador).
+    const cancion = await decodificarMp3(await obtenerAudio(id));
+    const fr = 22050;
+    const analizador = contextoAudio.createAnalyser();
+    analizador.fftSize = 16384;
+    fuenteCancion.connect(analizador);
+    const corrimientos = [];
+    for (let n = 0; n < 8 && !audio.paused && id === idActual && audio.playbackRate === 1; n++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const bruto = new Float32Array(analizador.fftSize);
+      analizador.getFloatTimeDomainData(bruto);
+      const posicion = audio.currentTime;
+      // Pasamos lo capturado (a la frecuencia del contexto) a 22050 Hz.
+      const sr = contextoAudio.sampleRate;
+      const captura = new Float32Array(Math.floor(bruto.length * fr / sr));
+      for (let i = 0; i < captura.length; i++) captura[i] = bruto[Math.floor(i * sr / fr)];
+      // La captura TERMINA en lo que pasa ahora; según audio.currentTime, eso es "posicion".
+      const supuesto = Math.round((posicion - captura.length / fr) * fr);
+      // Primero una búsqueda gruesa (de -0,8 s a +0,2 s, de a 8 muestras) y después fina.
+      let mejor = -1, mejorLag = 0;
+      for (let lag = -0.8 * fr; lag <= 0.2 * fr; lag += 8) {
+        const r = parecido(captura, cancion, supuesto + lag, 4);
+        if (r > mejor) { mejor = r; mejorLag = lag; }
+      }
+      for (let lag = mejorLag - 8; lag <= mejorLag + 8; lag++) {
+        const r = parecido(captura, cancion, supuesto + lag, 1);
+        if (r > mejor) { mejor = r; mejorLag = lag; }
+      }
+      if (mejor > 0.8) corrimientos.push(-mejorLag / fr * 1000);   // ms que el audio va atrasado
+    }
+    analizador.disconnect();
+    if (corrimientos.length < 4) {
+      mostrarDemora();
+      return null;
+    }
+    corrimientos.sort((a, b) => a - b);
+    demoraAudio = Math.max(0, Math.min(1000, corrimientos[corrimientos.length >> 1]));
+    try {
+      localStorage.setItem("demoraAudio", JSON.stringify({ ms: demoraAudio, medida: Date.now() }));
+    } catch {
+      // queda para esta sesión
+    }
+    reiniciarMetronomo();
+    mostrarDemora();
+    return demoraAudio;
+  } catch {
+    mostrarDemora();
+    return null;
+  } finally {
+    midiendoDemora = false;
+  }
+}
+
+// La primera vez que suena una canción a x1 en este dispositivo, se mide sola.
+audio.addEventListener("play", () => {
+  if (demoraAudio === null) setTimeout(() => { if (demoraAudio === null) medirDemora(); }, 1500);
+});
+
+botonMedirDemora.addEventListener("click", async () => {
+  if (audio.paused || audio.playbackRate !== 1) {
+    mostrarDemora("Para medir, poné la canción a sonar a x1 y tocá de nuevo.");
+    return;
+  }
+  const medida = await medirDemora();
+  if (medida === null) mostrarDemora("No pude medir la demora: probá en una parte con música (no en silencio).");
+});
+
+function cambiarAjusteMetronomo(delta) {
+  ajusteMetronomo = Math.max(-300, Math.min(300, ajusteMetronomo + delta));
+  try {
+    localStorage.setItem("ajusteMetronomo", String(ajusteMetronomo));
+  } catch {
+    // queda para esta sesión
+  }
+  reiniciarMetronomo();
+  mostrarDemora();
+}
+metronomoAntes.addEventListener("click", () => cambiarAjusteMetronomo(-10));
+metronomoDespues.addEventListener("click", () => cambiarAjusteMetronomo(+10));
+
+/* ------------------------------------------------------------------
    Metrónomo
 
    Cada 25 ms revisamos qué pulsos van a sonar en los próximos 0,2 s y
    los "programamos" en el reloj del AudioContext, que es muy preciso.
-   Para saber CUÁNDO cae un pulso usamos la posición real del audio y la
-   velocidad:  momento = ahora + (pulso + ajuste - posición) / velocidad.
+   Para saber CUÁNDO cae un pulso usamos la posición que realmente está
+   pasando por el contexto (audio.currentTime menos la demora medida, ver
+   "Demora del audio") y la velocidad:
+     momento = ahora + (pulso + ajuste + ajuste fino - posición) / velocidad.
    Si se adelanta, se pausa, cambia la velocidad o el ajuste, se cancelan
    los clics ya programados y se vuelve a calcular desde la nueva posición.
    ------------------------------------------------------------------ */
@@ -1224,18 +1391,21 @@ function programarMetronomo() {
   if (!contextoAudio || contextoAudio.state !== "running") return;
 
   const velocidad = audio.playbackRate;
-  const posicion = audio.currentTime;            // dónde está la canción ahora
+  // Lo que está pasando AHORA por el contexto (audio.currentTime menos la demora medida).
+  const posicion = posicionQueSuena(false);
   const ahora = contextoAudio.currentTime;       // y qué hora marca el reloj del contexto
+  // Corrimiento de cada clic respecto del pulso: el ajuste de la canción más el ajuste fino.
+  const corrimiento = ajuste + ajusteMetronomo / 1000;
 
   // La primera vez (o después de reiniciar): el primer pulso que todavía no sonó.
   if (proximoPulsoMetronomo === null) {
-    proximoPulsoMetronomo = pulsos.findIndex((p) => p + ajuste >= posicion - 0.005);
+    proximoPulsoMetronomo = pulsos.findIndex((p) => p + corrimiento >= posicion - 0.005);
     if (proximoPulsoMetronomo < 0) proximoPulsoMetronomo = pulsos.length;
   }
 
   while (proximoPulsoMetronomo < pulsos.length) {
     const i = proximoPulsoMetronomo;
-    const cuando = ahora + (pulsos[i] + ajuste - posicion) / velocidad;
+    const cuando = ahora + (pulsos[i] + corrimiento - posicion) / velocidad;
     if (cuando > ahora + ADELANTO_METRONOMO) break;      // todavía falta: lo programamos después
     if (cuando >= ahora - 0.02) sonarClic(Math.max(cuando, ahora), esCompas[i]);
     proximoPulsoMetronomo++;
@@ -1352,6 +1522,7 @@ botonInicio.addEventListener("click", () => {
 
 // Muestra en los controles las preferencias guardadas.
 function mostrarPreferencias() {
+  mostrarDemora();
   volumenCancionControl.value = volumenCancion;
   volumenMetronomoControl.value = volumenMetronomo;
   reproduccionContinuaControl.checked = reproduccionContinua;
@@ -1423,7 +1594,8 @@ function actualizar() {
   if (acordes.length === 0) return;
 
   // Restamos el ajuste: con ajuste +0.5, a los 10.5 s mostramos el acorde de los 10 s.
-  const t = audio.currentTime - ajuste;
+  // Mientras suena, se usa lo que realmente se escucha (descontando la demora del audio).
+  const t = posicionQueSuena(true) - ajuste;
   const indice = buscarIndice(t);
 
   // Cuenta regresiva hasta el próximo cambio (se actualiza siempre)
