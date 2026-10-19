@@ -123,7 +123,9 @@ body {
 
 .selector-vista {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Una columna por vista (Pulsos | Grilla | Tabs), todas en una sola fila */
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   padding: 4px;
   border: 1px solid var(--borde);
   border-radius: 14px;
@@ -276,6 +278,120 @@ body {
 
 .columna-diagrama:first-child .diagrama .punto {
   fill: var(--acento);
+}
+
+/* ------------------------------------------------------------------
+   Vista de tablaturas (alphaTab)
+   ------------------------------------------------------------------ */
+.vista-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vista-tabs[hidden] {
+  display: none;
+}
+
+/* Selectores de Guitarra 1 y 2, cada uno con el color de su tablatura */
+.pistas-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.pista-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.pista-1 { color: #f5b83d; }
+.pista-2 { color: #5ec8f2; }
+
+.pista-tab select {
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid currentColor;
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-weight: 400;
+}
+
+/* Sincronización: desplegable para que no ocupe lugar si no se usa */
+.sync-tabs {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 0 10px;
+}
+
+.sync-tabs[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.sync-tabs summary {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sync-tabs summary small {
+  color: var(--texto-suave);
+  font-weight: 400;
+}
+
+.fila-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Donde alphaTab dibuja; se desplaza sola siguiendo el cursor */
+.caja-tabs {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: #0b0d10;
+}
+
+/* Cursor de alphaTab: el compás que suena y una línea en la nota actual */
+.caja-tabs .at-cursor-bar {
+  background: rgba(245, 184, 61, 0.12);
+}
+
+.caja-tabs .at-cursor-beat {
+  width: 3px;
+  background: #f2f4f6;
+}
+
+.caja-tabs .at-highlight * {
+  fill: #ffffff;
+  stroke: #ffffff;
+}
+
+/* Botón del panel para elegir el archivo de Guitar Pro */
+.boton-archivo-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 /* ------------------------------------------------------------------

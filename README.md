@@ -61,6 +61,19 @@ pip install -r requirements.txt
 
 ## Créditos
 
+### alphaTab (tablaturas)
+
+La vista "Tabs" usa [alphaTab](https://github.com/CoderLine/alphaTab) **1.8.4**, de Daniel Kuschny y colaboradores,
+para leer y dibujar los archivos de Guitar Pro. Está publicada con la
+[Mozilla Public License 2.0](https://mozilla.org/MPL/2.0/): los archivos están en `app/lib/alphatab/` sin
+modificar, copiados del paquete npm `@coderline/alphatab@1.8.4`, con la licencia completa en
+`app/lib/alphatab/LICENSE-MPL-2.0.txt`. El código fuente original está en el repositorio de alphaTab.
+
+alphaTab usa la fuente musical **Bravura** (Steinberg Media Technologies), publicada con la
+SIL Open Font License 1.1 (ver `app/lib/alphatab/font/Bravura-OFL.txt`).
+
+### chords-db (posiciones de acordes)
+
 Las posiciones de acordes de `app/acordes-extra.js` están convertidas de
 [chords-db](https://github.com/tombatossals/chords-db), de David Rubert,
 publicada con la siguiente licencia:

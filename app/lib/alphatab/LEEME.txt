@@ -1,0 +1,6 @@
+alphaTab 1.8.4 (https://github.com/CoderLine/alphaTab, https://www.npmjs.com/package/@coderline/alphatab)
+Licencia: Mozilla Public License 2.0 (ver LICENSE-MPL-2.0.txt).
+Archivos sin modificar, copiados del paquete npm @coderline/alphatab@1.8.4
+(integridad sha512-VN5rfTZZWgA63Ny1aDKCp02k3Qm9CHhg4Q9AnK0kHm7G+fNDNZo36TeToPDFoJ6VpB9+AHcCrHwHFUP1tKqdsw==).
+
+Fuente Bravura (carpeta font/): SIL Open Font License 1.1 (ver font/Bravura-OFL.txt).

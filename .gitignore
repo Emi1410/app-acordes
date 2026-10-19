@@ -14,3 +14,9 @@ __pycache__/
 
 # Archivos comprimidos
 *.rar
+
+# Tablaturas de Guitar Pro (no se suben al repo público)
+*.gp
+*.gp5
+*.gpx
+*.gp4

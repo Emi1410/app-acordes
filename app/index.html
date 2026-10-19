@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=2.3">
+  <link rel="stylesheet" href="style.css?v=2.4">
 </head>
 <body>
 
@@ -101,6 +101,7 @@
       <div class="selector-vista" role="group" aria-label="Vista del reproductor">
         <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
         <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
+        <button id="boton-vista-tabs" type="button" aria-pressed="false">Tabs</button>
       </div>
     </div>
 
@@ -132,6 +133,39 @@
           <small id="cuenta-despues">Sigue</small>
         </div>
       </div>
+    </div>
+
+    <!-- ===== Vista de tablaturas (archivo de Guitar Pro, dibujado con alphaTab) ===== -->
+    <div id="vista-tabs" class="vista-tabs" hidden>
+      <!-- Avisos: sin tablatura, cargando, errores -->
+      <p id="aviso-tabs" class="aviso-pulsos" hidden></p>
+
+      <!-- Qué pistas del archivo se muestran como Guitarra 1 y Guitarra 2 -->
+      <div class="pistas-tabs">
+        <label class="pista-tab pista-1">Guit. 1 <select id="pista-1"></select></label>
+        <label class="pista-tab pista-2">Guit. 2 <select id="pista-2"></select></label>
+      </div>
+
+      <!-- Sincronización con el mp3 (se guarda por canción) -->
+      <details id="sync-tabs" class="sync-tabs">
+        <summary>Sincronizar <small id="resumen-sync"></small></summary>
+        <div class="paso">
+          <span>Compás 1 en</span>
+          <button id="inicio-menos" type="button" aria-label="Compás 1 un poco antes">−</button>
+          <output id="valor-inicio">0,00 s</output>
+          <button id="inicio-mas" type="button" aria-label="Compás 1 un poco después">+</button>
+          <button id="inicio-ahora" type="button" title="El compás 1 empieza en lo que suena ahora">Ahora</button>
+        </div>
+        <div class="fila-sync">
+          <button id="marcar-compas" class="boton boton-chico boton-principal" type="button">Marcar compás</button>
+          <button id="deshacer-punto" class="boton-lista boton-renombrar" type="button">Deshacer último</button>
+          <button id="borrar-puntos" class="boton-lista boton-borrar-lista" type="button">Borrar puntos</button>
+        </div>
+        <p class="ayuda">Para grabaciones en vivo que se aceleran: con la canción sonando, tocá “Marcar compás” justo cuando empieza un compás y elegí cuál es. Entre punto y punto se interpola.</p>
+      </details>
+
+      <!-- Acá alphaTab dibuja las tablaturas; se desplaza sola siguiendo lo que suena -->
+      <div id="caja-tabs" class="caja-tabs"><div id="tabs"></div></div>
     </div>
 
     <!-- ===== Barra del editor de acordes (solo en modo edición) ===== -->
@@ -247,6 +281,11 @@
         <button id="boton-reanalizar" class="boton boton-chico" type="button">↻ Volver a analizar</button>
         <!-- Baja el JSON con los acordes (y sus correcciones) para usarlo en otro celular o compu -->
         <button id="boton-exportar" class="boton boton-chico" type="button">Exportar JSON</button>
+        <!-- Archivo de Guitar Pro para la vista "Tabs" (se guarda junto con la canción) -->
+        <label class="boton boton-chico boton-archivo-tab">
+          <input type="file" id="input-tablatura" accept=".gp,.gp5,.gpx,.gp4" hidden>
+          <span id="texto-tablatura">Agregar tablatura (.gp)</span>
+        </label>
         <!-- Solo aparece si la canción fue editada -->
         <button id="boton-restaurar" class="boton boton-chico" type="button" hidden>Restaurar análisis original</button>
       </div>
@@ -376,12 +415,14 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=2.3"></script>
-  <script src="acordes.js?v=2.3"></script>
-  <script src="diagrama.js?v=2.3"></script>
-  <script src="biblioteca.js?v=2.3"></script>
-  <script src="analizador.js?v=2.3"></script>
-  <script src="app.js?v=2.3"></script>
-  <script src="editor.js?v=2.3"></script>
+  <script src="acordes-extra.js?v=2.4"></script>
+  <script src="acordes.js?v=2.4"></script>
+  <script src="diagrama.js?v=2.4"></script>
+  <script src="biblioteca.js?v=2.4"></script>
+  <script src="analizador.js?v=2.4"></script>
+  <script src="app.js?v=2.4"></script>
+  <script src="editor.js?v=2.4"></script>
+  <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
+  <script src="tablaturas.js?v=2.4"></script>
 </body>
 </html>

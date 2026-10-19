@@ -71,6 +71,8 @@ const botonVistaPulsos = document.getElementById("boton-vista-pulsos");
 const botonVistaGrilla = document.getElementById("boton-vista-grilla");
 const vistaPulsos = document.getElementById("vista-pulsos");
 const vistaGrilla = document.getElementById("vista-grilla");
+const botonVistaTabs = document.getElementById("boton-vista-tabs");
+const vistaTabs = document.getElementById("vista-tabs");   // la maneja tablaturas.js
 const avisoPulsos = document.getElementById("aviso-pulsos");
 const tira = document.getElementById("tira");
 const diagramaAhora = document.getElementById("diagrama-ahora");
@@ -108,7 +110,8 @@ let indicePulso = -1;
 // Vista elegida en el reproductor: "pulsos" (tira tipo Chordify) o "grilla".
 let vista = "pulsos";
 try {
-  if (localStorage.getItem("vista") === "grilla") vista = "grilla";
+  const guardada = localStorage.getItem("vista");
+  if (guardada === "grilla" || guardada === "tabs") vista = guardada;
 } catch {
   // sin localStorage: se usa la vista de pulsos
 }
@@ -892,6 +895,7 @@ async function cargarCancion(id) {
   mostrarDiagramas();
   actualizar();
   mostrarPosicionEnLista();
+  mostrarVistaTabs();   // tablatura de esta canción, si la vista "Tabs" está activa (tablaturas.js)
   return true;
 }
 
@@ -1591,6 +1595,9 @@ function actualizar() {
   tiempoActual.textContent = formatoTiempo(audio.currentTime);
   if (!arrastrando) barraTiempo.value = audio.currentTime;
 
+  // Vista de tablaturas: le contamos a alphaTab dónde está el mp3 (tablaturas.js).
+  actualizarTabs();
+
   if (acordes.length === 0) return;
 
   // Restamos el ajuste: con ajuste +0.5, a los 10.5 s mostramos el acorde de los 10 s.
@@ -1779,15 +1786,20 @@ function actualizarTira(t) {
   }
 }
 
-// Alterna entre la vista de pulsos y la grilla, y recuerda la elección.
+// Alterna entre las vistas (pulsos, grilla o tablaturas) y recuerda la elección.
 function aplicarVista(nueva) {
   vista = nueva;
   const enPulsos = vista === "pulsos";
+  const enGrilla = vista === "grilla";
+  const enTabs = vista === "tabs";
   vistaPulsos.hidden = !enPulsos;
-  vistaGrilla.hidden = enPulsos;
-  lista.hidden = enPulsos;
+  vistaGrilla.hidden = !enGrilla;
+  lista.hidden = !enGrilla;
+  vistaTabs.hidden = !enTabs;
   botonVistaPulsos.setAttribute("aria-pressed", String(enPulsos));
-  botonVistaGrilla.setAttribute("aria-pressed", String(!enPulsos));
+  botonVistaGrilla.setAttribute("aria-pressed", String(enGrilla));
+  botonVistaTabs.setAttribute("aria-pressed", String(enTabs));
+  if (enTabs) mostrarVistaTabs();   // carga la tablatura si hace falta (tablaturas.js)
   try {
     localStorage.setItem("vista", vista);
   } catch {
@@ -1802,6 +1814,7 @@ function aplicarVista(nueva) {
 
 botonVistaPulsos.addEventListener("click", () => aplicarVista("pulsos"));
 botonVistaGrilla.addEventListener("click", () => aplicarVista("grilla"));
+botonVistaTabs.addEventListener("click", () => aplicarVista("tabs"));
 
 // Mientras suena, pedimos al navegador que llame a "actualizar" en cada
 // cuadro de la pantalla (~60 veces por segundo). Es mucho más preciso que
@@ -2144,8 +2157,13 @@ document.addEventListener("visibilitychange", () => {
 
 /* ==================================================================
    Inicio
+
+   Se espera a que se carguen TODOS los scripts (editor.js y tablaturas.js
+   van después de este archivo y aplicarVista usa funciones de ellos).
    ================================================================== */
 
-aplicarVista(vista);
-mostrarPreferencias();
-mostrarBiblioteca();
+document.addEventListener("DOMContentLoaded", () => {
+  aplicarVista(vista);
+  mostrarPreferencias();
+  mostrarBiblioteca();
+});

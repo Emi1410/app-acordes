@@ -23,10 +23,11 @@ const NOMBRE_BASE = "app-acordes";
 // Versión de la ESTRUCTURA de la base (no de la app). Historial:
 //   1: almacenes "canciones" y "audios".
 //   2: se agrega el almacén "listas".
+//   3: se agrega el almacén "tablaturas" (archivos de Guitar Pro, uno por canción).
 // Al subirla, el navegador ejecuta onupgradeneeded en los celulares que
 // tenían una versión anterior. Ahí solo se AGREGA lo nuevo: nunca se
 // borran ni se tocan los almacenes que ya existen, así no se pierde nada.
-const VERSION_BASE = 2;
+const VERSION_BASE = 3;
 
 // Abrimos la base una sola vez y reutilizamos la conexión.
 let promesaBase = null;
@@ -47,6 +48,10 @@ function abrirBase() {
         }
         if (evento.oldVersion < 2) {
           base.createObjectStore("listas", { keyPath: "id", autoIncrement: true });
+        }
+        if (evento.oldVersion < 3) {
+          // { id (el de la canción), archivo: Blob, nombre: "Tema.gp" }
+          base.createObjectStore("tablaturas", { keyPath: "id" });
         }
       };
       pedido.onsuccess = () => {
@@ -140,11 +145,12 @@ async function obtenerAudio(id) {
   return registro ? registro.mp3 : null;
 }
 
-/** Borra la canción y su mp3 juntos, y la saca de todas las listas. */
+/** Borra la canción, su mp3 y su tablatura juntos, y la saca de todas las listas. */
 function borrarCancion(id) {
-  return transaccion(["canciones", "audios", "listas"], "readwrite", (tx) => {
+  return transaccion(["canciones", "audios", "listas", "tablaturas"], "readwrite", (tx) => {
     tx.objectStore("canciones").delete(id);
     tx.objectStore("audios").delete(id);
+    tx.objectStore("tablaturas").delete(id);
     const listas = tx.objectStore("listas");
     const pedido = listas.getAll();
     pedido.addEventListener("success", () => {
@@ -271,6 +277,22 @@ function actualizarCancion(id, cambios) {
       if (pedido.result) almacen.put({ ...pedido.result, ...cambios });
     });
   });
+}
+
+/* ==================================================================
+   Tablaturas (archivos de Guitar Pro) de cada canción
+   ================================================================== */
+
+/** Guarda (o reemplaza) la tablatura de una canción. */
+function guardarTablatura(id, archivo, nombre) {
+  return transaccion(["tablaturas"], "readwrite", (tx) => {
+    tx.objectStore("tablaturas").put({ id, archivo, nombre });
+  });
+}
+
+/** La tablatura de una canción: { id, archivo, nombre }, o undefined si no tiene. */
+function obtenerTablatura(id) {
+  return transaccion(["tablaturas"], "readonly", (tx) => tx.objectStore("tablaturas").get(id));
 }
 
 /** Guarda el ajuste de sincronización de una canción. */
