@@ -1781,3 +1781,90 @@ body {
 .hoja-contenido {
   gap: 6px;
 }
+
+/* ------------------------------------------------------------------
+   Mástil virtual (vista Tabs)
+   ------------------------------------------------------------------ */
+.mastil {
+  flex: none;
+  border-radius: 10px;
+  background: #0b0d10;
+  overflow: hidden;
+}
+
+.svg-mastil {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* El tramo de trastes se corre suavemente cuando cambia de zona */
+.mastil-movil {
+  transition: transform 0.35s ease;
+}
+
+.mastil-madera {
+  fill: #1a1612;
+}
+
+.mastil-marca {
+  fill: #4a4036;
+}
+
+.mastil-traste {
+  stroke: #6b747e;
+  stroke-width: 1.2;
+}
+
+.mastil-cejuela {
+  stroke: #d8d2c4;
+  stroke-width: 4;
+}
+
+.mastil-cuerda {
+  stroke: #9aa4ae;
+}
+
+.mastil-cuerda-nombre,
+.mastil-numero {
+  fill: var(--texto-suave);
+  font-size: 10px;
+  font-weight: 600;
+  dominant-baseline: central;
+}
+
+.mastil-cuerda-nombre {
+  text-anchor: end;
+}
+
+.mastil-numero {
+  text-anchor: middle;
+}
+
+/* Notas que suenan: Guitarra 1 en amarillo y Guitarra 2 en celeste */
+.mastil-nota-1 {
+  fill: #f5b83d;
+}
+
+.mastil-nota-2 {
+  fill: #5ec8f2;
+}
+
+.mastil-nota-texto {
+  fill: #111418;
+  font-size: 8.5px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+/* Lista de puntos de sincronización (con la confianza de los automáticos) */
+.lista-sync {
+  max-height: 120px;
+  margin: 0;
+  padding: 0 0 0 16px;
+  overflow-y: auto;
+  color: var(--texto-suave);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}

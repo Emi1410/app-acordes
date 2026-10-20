@@ -209,10 +209,11 @@ async function mostrarVistaTabs() {
     await cargarAlphaTab();
     crearApiTabs();
     // Sincronización y pistas guardadas para esta canción
+    const guardada = cancionActual && cancionActual.tabSync ? cancionActual.tabSync : {};
     syncTabs = {
-      inicio: cancionActual && cancionActual.tabSync ? cancionActual.tabSync.inicio || 0 : 0,
-      puntos: cancionActual && cancionActual.tabSync && Array.isArray(cancionActual.tabSync.puntos)
-        ? cancionActual.tabSync.puntos.slice() : [],
+      inicio: guardada.inicio || 0,
+      puntos: Array.isArray(guardada.puntos) ? guardada.puntos.slice() : [],
+      confianzaInicio: guardada.confianzaInicio,   // solo si la puso la sincronización automática
     };
     tabsDeCancion = id;
     apiTabs.load(new Uint8Array(await tablatura.archivo.arrayBuffer()));
@@ -314,6 +315,7 @@ function alCargarPartitura(partitura) {
   tiemposPartitura = calcularTiemposPartitura(partitura);
   pintarPistas(partitura);
   dibujarPistas();
+  prepararMastil(partitura);   // el diapasón con las notas que suenan (mastil.js)
   mostrarSync();
   partituraLista = true;
   revisarTabsListas();
@@ -433,7 +435,7 @@ function aplicarSyncTabs() {
 
 function guardarSyncTabs() {
   if (idActual === null) return;
-  const datos = { inicio: syncTabs.inicio, puntos: syncTabs.puntos.slice() };
+  const datos = { inicio: syncTabs.inicio, puntos: syncTabs.puntos.slice(), confianzaInicio: syncTabs.confianzaInicio };
   actualizarCancion(idActual, { tabSync: datos }).catch(() => {});
   cancionActual = { ...cancionActual, tabSync: datos };
   mostrarSync();
@@ -446,6 +448,7 @@ function mostrarSync() {
   resumenSync.textContent = `(compás 1 en ${(syncTabs.inicio / 1000).toFixed(1).replace(".", ",")} s · ${n === 1 ? "1 punto" : `${n} puntos`})`;
   deshacerPunto.disabled = n === 0;
   borrarPuntos.disabled = n === 0;
+  mostrarListaSync();   // los puntos con su confianza (sincronizar-solo.js)
 }
 
 // Lo que se está ESCUCHANDO ahora, en ms del mp3 (descuenta la demora del audio).
@@ -518,6 +521,7 @@ borrarPuntos.addEventListener("click", () => {
 function actualizarTabs() {
   if (!tabsListas || vistaTabs.hidden || tabsDeCancion !== idActual) return;
   apiTabs.player.output.updatePosition(msQueSuena());
+  actualizarMastil();   // ilumina en el mástil las notas que suenan (mastil.js)
 }
 
 // El cursor de alphaTab se anima solo mientras su reproductor está "sonando".

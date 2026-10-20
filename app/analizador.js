@@ -86,6 +86,13 @@ function codigoAnalizador() {
   // Recibe las muestras (22050 Hz, mono), el nombre y las opciones; responde con el JSON.
   self.onmessage = (evento) => {
     try {
+      // Modo "solo ataques": devuelve la envolvente de ataques (para la
+      // sincronización automática de las tablaturas), sin buscar acordes.
+      if (evento.data.opciones && evento.data.opciones.soloAtaques) {
+        const envolvente = envolventeDeAtaques(evento.data.muestras, (f) => avisar("Escuchando los ataques", f));
+        self.postMessage({ tipo: "listo", datos: { envolvente, fps: SR / SALTO } });
+        return;
+      }
       const datos = analizar(evento.data.muestras, evento.data.nombre, evento.data.opciones || {});
       self.postMessage({ tipo: "listo", datos });
     } catch (error) {
