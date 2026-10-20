@@ -42,6 +42,55 @@ const deshacerPunto = document.getElementById("deshacer-punto");
 const borrarPuntos = document.getElementById("borrar-puntos");
 const inputTablatura = document.getElementById("input-tablatura");
 const textoTablatura = document.getElementById("texto-tablatura");
+const zoomMenos = document.getElementById("zoom-menos");
+const zoomMas = document.getElementById("zoom-mas");
+const valorZoom = document.getElementById("valor-zoom");
+const botonPanelTabs = document.getElementById("boton-panel-tabs");
+const panelTabs = document.getElementById("panel-tabs");
+const cerrarPanelTabs = document.getElementById("cerrar-panel-tabs");
+
+// Zoom de la tablatura (escala de alphaTab). Se recuerda en este dispositivo.
+const ZOOMS = [0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.15, 1.3];
+let zoomTabs = 0.7;
+try {
+  const guardado = Number(localStorage.getItem("zoomTabs"));
+  if (ZOOMS.includes(guardado)) zoomTabs = guardado;
+} catch {
+  // sin localStorage: 70 %
+}
+
+function mostrarZoom() {
+  valorZoom.textContent = `${Math.round(zoomTabs * 100)} %`;
+  zoomMenos.disabled = zoomTabs <= ZOOMS[0];
+  zoomMas.disabled = zoomTabs >= ZOOMS[ZOOMS.length - 1];
+}
+
+// − y +: cambia el tamaño, vuelve a dibujar y lo recuerda.
+function cambiarZoom(paso) {
+  const i = ZOOMS.indexOf(zoomTabs);
+  zoomTabs = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i + paso))];
+  try {
+    localStorage.setItem("zoomTabs", String(zoomTabs));
+  } catch {
+    // queda para esta sesión
+  }
+  mostrarZoom();
+  if (apiTabs) {
+    apiTabs.settings.display.scale = zoomTabs;
+    apiTabs.updateSettings();
+    apiTabs.render();
+  }
+}
+zoomMenos.addEventListener("click", () => cambiarZoom(-1));
+zoomMas.addEventListener("click", () => cambiarZoom(+1));
+mostrarZoom();
+
+// Panel con las pistas y la sincronización (para que la tablatura ocupe casi toda la pantalla).
+botonPanelTabs.addEventListener("click", () => panelTabs.showModal());
+cerrarPanelTabs.addEventListener("click", () => panelTabs.close());
+panelTabs.addEventListener("click", (evento) => {
+  if (evento.target === panelTabs) panelTabs.close();   // tocar afuera también lo cierra
+});
 
 // Estado de la vista
 let apiTabs = null;            // la instancia de alphaTab (se crea una sola vez)
@@ -186,7 +235,7 @@ function crearApiTabs() {
     display: {
       staveProfile: alphaTab.StaveProfile.Tab,   // solo tablatura (sin pentagrama)
       layoutMode: alphaTab.LayoutMode.Page,
-      scale: 0.85,
+      scale: zoomTabs,                           // más chica que antes; se cambia con − y +
       resources: {
         mainGlyphColor: "#f2f4f6",
         secondaryGlyphColor: "rgba(242,244,246,0.45)",
@@ -209,7 +258,9 @@ function crearApiTabs() {
 
   apiTabs.scoreLoaded.on(alCargarPartitura);
   apiTabs.renderFinished.on(() => {
-    if (tabsListas) mostrarAvisoTabs("");
+    if (!tabsListas) return;
+    mostrarAvisoTabs("");
+    llevarVistaAlCursor();   // al terminar de dibujar (también después de un zoom), mostrar el cursor
   });
   apiTabs.playerReady.on(() => {
     // El "reproductor" de alphaTab le pide al mp3 que se mueva, suene o pare.
@@ -472,4 +523,10 @@ function actualizarTabs() {
 // El cursor de alphaTab se anima solo mientras su reproductor está "sonando".
 audio.addEventListener("play", () => { if (tabsListas) apiTabs.play(); });
 audio.addEventListener("pause", () => { if (tabsListas) apiTabs.pause(); });
-audio.addEventListener("seeked", actualizarTabs);
+// Al saltar a otro lugar con la canción en pausa, alphaTab mueve el cursor pero
+// no desplaza la vista: se lo pedimos, para que se vea dónde quedó.
+function llevarVistaAlCursor() {
+  actualizarTabs();
+  if (tabsListas && !vistaTabs.hidden && audio.paused) setTimeout(() => apiTabs.scrollToCursor(), 60);
+}
+audio.addEventListener("seeked", llevarVistaAlCursor);

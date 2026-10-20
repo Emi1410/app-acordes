@@ -80,6 +80,7 @@ function empezarEdicion() {
   historialRehacer = [];
   seleccion = null;
   pantallaReproductor.classList.add("editando");
+  mostrarVelocidadEdicion();
   mostrarEstadoEditor();
 }
 
@@ -106,6 +107,21 @@ function puedeSalirDelEditor() {
   terminarEdicion();
   return true;
 }
+
+// Velocidad dentro del editor: usa la misma función que el panel "Más"
+// (cambiarVelocidad, en app.js), así se guarda igual por canción.
+const edicionVelMenos = document.getElementById("edicion-vel-menos");
+const edicionVelMas = document.getElementById("edicion-vel-mas");
+const edicionVel = document.getElementById("edicion-vel");
+
+function mostrarVelocidadEdicion() {
+  edicionVel.textContent = textoVelocidad(audio.playbackRate);
+  edicionVelMenos.disabled = audio.playbackRate <= VELOCIDADES[0];
+  edicionVelMas.disabled = audio.playbackRate >= VELOCIDADES[VELOCIDADES.length - 1];
+}
+edicionVelMenos.addEventListener("click", () => { cambiarVelocidad(-1); mostrarVelocidadEdicion(); });
+edicionVelMas.addEventListener("click", () => { cambiarVelocidad(+1); mostrarVelocidadEdicion(); });
+audio.addEventListener("ratechange", mostrarVelocidadEdicion);
 
 // El botón está en el panel "Más": lo cerramos y entramos al editor.
 botonEditar.addEventListener("click", () => {

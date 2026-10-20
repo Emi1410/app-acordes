@@ -412,7 +412,6 @@ body {
 /* Mientras se edita quedan solo el play y la barra de tiempo (para escuchar
    y pararse donde hay que corregir); se ocultan los demás controles. */
 #pantalla-reproductor.editando .transporte > :not(#boton-play),
-#pantalla-reproductor.editando .ajuste,
 #pantalla-reproductor.editando .fila-vista,
 #pantalla-reproductor.editando #boton-agregar-lista {
   display: none;
@@ -1149,12 +1148,6 @@ body {
 /* ------------------------------------------------------------------
    5. Ajuste de sincronización
    ------------------------------------------------------------------ */
-.ajuste {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr auto;
-  align-items: center;
-  gap: 8px;
-}
 
 /* Botón "Más": abre el panel de opciones y muestra un resumen (x1.25) */
 .boton-mas {
@@ -1367,19 +1360,7 @@ body {
   accent-color: var(--acento);
 }
 
-.ajuste-valor {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 80px;
-  font-size: 1.2rem;
-  font-variant-numeric: tabular-nums;
-}
 
-.ajuste-valor small {
-  font-size: 0.8rem;
-  color: var(--texto-suave);
-}
 
 /* ------------------------------------------------------------------
    4. Lista de acordes: grilla de "fichas" que ocupa el resto de la pantalla
@@ -1433,4 +1414,370 @@ body {
 
 .lista li.actual small {
   color: var(--acento-texto);
+}
+
+/* ==================================================================
+   Diseño compacto (a partir de probar en el celular)
+
+   Todo un poco más chico: letra base, botones, espacios y bordes. Los
+   botones quedan de al menos 40 px de alto para tocarlos bien con el dedo.
+   Va al final del archivo para pisar los tamaños de arriba.
+   ================================================================== */
+
+:root {
+  --alto-boton: 44px;
+}
+
+html {
+  font-size: 15px;            /* 1rem = 15 px (antes 16) */
+}
+
+body {
+  gap: 8px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+}
+
+.pantalla-completa {
+  gap: 8px;
+}
+
+.boton {
+  font-size: 0.95rem;
+  border-radius: 12px;
+}
+
+.encabezado {
+  min-height: 40px;
+  gap: 8px;
+}
+
+.encabezado h1 {
+  font-size: 1.15rem;
+}
+
+.boton-volver {
+  width: 42px;
+  height: 40px;
+  min-height: 40px;
+  font-size: 1.2rem;
+}
+
+.encabezado .boton-chico {
+  min-height: 40px;
+  padding: 0 10px;
+}
+
+/* Nombres de canciones: más chicos y en hasta dos renglones antes de
+   cortar con "…" (en listas, buscador y encabezado del reproductor). */
+.titulo,
+.cancion-abrir b {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+}
+
+.encabezado .titulo {
+  font-size: 0.9rem;
+  line-height: 1.25;
+  color: var(--texto);
+}
+
+.posicion-lista {
+  font-size: 0.75rem;
+}
+
+/* Biblioteca */
+.buscador {
+  min-height: 42px;
+  font-size: 1rem;
+  border-radius: 12px;
+}
+
+.lista-canciones {
+  gap: 6px;
+}
+
+.cancion-abrir {
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 12px;
+}
+
+.cancion-abrir b {
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.cancion-abrir small {
+  font-size: 0.78rem;
+}
+
+.cancion-borrar {
+  width: 42px;
+  border-radius: 12px;
+}
+
+.seccion {
+  padding: 0 8px;
+  border-radius: 12px;
+}
+
+.seccion summary {
+  min-height: 42px;
+  font-size: 1rem;
+}
+
+.seccion-acciones {
+  margin-bottom: 6px;
+}
+
+.boton-lista {
+  min-height: 38px;
+  font-size: 0.8rem;
+}
+
+.manija {
+  width: 30px;
+}
+
+.espacio {
+  font-size: 0.78rem;
+}
+
+/* Etiquetas de las canciones ("Sin analizar", "Sin lista") */
+.etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.etiqueta {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.etiqueta-pendiente {
+  border: 1px solid rgba(94, 200, 242, 0.5);
+  background: rgba(94, 200, 242, 0.12);
+  color: #8fd8f5;
+}
+
+.etiqueta-sin-lista {
+  border: 1px solid rgba(245, 184, 61, 0.5);
+  background: rgba(245, 184, 61, 0.1);
+  color: var(--acento);
+}
+
+/* Agregar canción / agregar varias */
+#pantalla-agregar {
+  overflow-y: auto;
+}
+
+.archivos {
+  gap: 8px;
+}
+
+.boton-archivo {
+  padding: 6px;
+}
+
+.campo input {
+  min-height: 42px;
+  font-size: 1rem;
+  border-radius: 12px;
+}
+
+.agregar-varias {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--borde);
+}
+
+.agregar-varias h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.lote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Reproductor */
+.selector-vista {
+  padding: 3px;
+  border-radius: 12px;
+}
+
+.selector-vista button {
+  min-height: 36px;
+  font-size: 0.9rem;
+}
+
+.indicador-acordes {
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+
+.pulso {
+  width: 42px;
+  height: 46px;
+  font-size: 1rem;
+}
+
+.par-diagramas {
+  gap: 8px;
+}
+
+.diagrama-par {
+  min-height: 90px;
+  max-width: 150px;
+}
+
+.nombre-par {
+  font-size: 1.5rem;
+}
+
+.columna-diagrama small {
+  font-size: 0.75rem;
+}
+
+.acorde-actual {
+  font-size: clamp(3rem, 15vw, 5rem);
+}
+
+.siguiente {
+  gap: 10px;
+  font-size: 1.2rem;
+}
+
+.diagrama-actual .diagrama {
+  width: 96px;
+}
+
+.lista {
+  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+}
+
+.lista li {
+  min-height: 40px;
+  border-radius: 10px;
+}
+
+.lista li b {
+  font-size: 1.05rem;
+}
+
+/* Una sola fila de controles: 0:00 · anterior · play · siguiente · metrónomo · Más */
+.reproductor {
+  gap: 2px;
+}
+
+.transporte {
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.boton-icono {
+  max-width: 52px;
+  height: 42px;
+  min-height: 42px;
+  font-size: 0.85rem;
+}
+
+.boton-icono svg {
+  width: 22px;
+  height: 22px;
+}
+
+.boton-play {
+  width: 50px;
+  height: 50px;
+  font-size: 1.4rem;
+}
+
+.boton-mas {
+  min-width: 0;
+  padding: 0;
+}
+
+.boton-mas small {
+  font-size: 0.7rem;
+}
+
+.barra input {
+  height: 26px;
+}
+
+.tiempos {
+  font-size: 0.8rem;
+}
+
+/* Vista Tabs: la tablatura ocupa casi toda la pantalla; arriba solo
+   "Ahora", el zoom y el botón del panel de pistas y sincronización. */
+.barra-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.barra-tabs .boton-chico {
+  min-height: 40px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+.zoom-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zoom-tabs output {
+  min-width: 44px;
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+#boton-panel-tabs {
+  margin-left: auto;
+}
+
+.titulo-sync {
+  margin: 0;
+  font-weight: 600;
+}
+
+.titulo-sync small {
+  color: var(--texto-suave);
+  font-weight: 400;
+}
+
+/* Editor: fila de velocidad (sin el botón extra de las otras filas) */
+.paso-edicion {
+  grid-template-columns: 92px 48px 1fr 48px;
+}
+
+/* Aviso cuando la demora medida no es creíble */
+.aviso-demora {
+  color: #ffcf7a;
+}
+
+/* Panel "Más": con la fila del ajuste ±0,1 s, un poco menos de espacio entre filas
+   para que siga entrando sin desplazarse en un celular vertical. */
+.hoja-contenido {
+  gap: 6px;
 }

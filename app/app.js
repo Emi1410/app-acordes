@@ -300,7 +300,10 @@ function actualizarSugerencias() {
 //
 // "manija": si es true, agrega a la izquierda una manija para arrastrar la
 // canción y cambiar su lugar en la lista.
-function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" }, manija = false } = {}) {
+//
+// "etiquetas": chips de color junto al nombre, por ejemplo "Sin lista".
+// Las canciones sin analizar (agregadas de a muchas) llevan siempre "Sin analizar".
+function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" }, manija = false, etiquetas = [] } = {}) {
   const item = document.createElement("li");
   item.className = "cancion";
   item.dataset.id = cancion.id;
@@ -320,7 +323,23 @@ function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto 
   abrir.className = "cancion-abrir";
   const nombre = document.createElement("b");
   nombre.textContent = cancion.nombre;
+  nombre.title = cancion.nombre;   // el nombre completo, por si se corta con "…"
   abrir.appendChild(nombre);
+
+  // Etiquetas de color (sin analizar, sin lista...)
+  const chips = [...(cancion.pendiente ? [{ texto: "Sin analizar", clase: "etiqueta-pendiente" }] : []), ...etiquetas];
+  if (chips.length) {
+    const fila = document.createElement("span");
+    fila.className = "etiquetas";
+    for (const { texto, clase } of chips) {
+      const chip = document.createElement("span");
+      chip.className = "etiqueta " + clase;
+      chip.textContent = texto;
+      fila.appendChild(chip);
+    }
+    abrir.appendChild(fila);
+  }
+
   for (const texto of [detalleCancion(cancion), detalleExtra]) {
     if (!texto) continue;
     const linea = document.createElement("small");
@@ -487,8 +506,11 @@ function dibujarSecciones() {
     const seccion = crearSeccion("todas", "Todas las canciones", todasLasCanciones.length);
     const ul = document.createElement("ul");
     ul.className = "lista-canciones";
+    // Las que no están en ninguna lista llevan la etiqueta "Sin lista".
+    const enAlgunaLista = new Set(todasLasListas.flatMap((l) => l.canciones));
     for (const cancion of todasLasCanciones) {
       ul.appendChild(crearItemCancion(cancion, {
+        etiquetas: enAlgunaLista.has(cancion.id) ? [] : [{ texto: "Sin lista", clase: "etiqueta-sin-lista" }],
         accion: {
           texto: "✕",
           etiqueta: `Borrar ${cancion.nombre}`,
@@ -607,6 +629,8 @@ async function mostrarEspacio(canciones, numero) {
   const cantidad = canciones.length === 1 ? "1 canción" : `${canciones.length} canciones`;
 
   const partes = [`${cantidad} · ${formatoTamano(ocupado)}`];
+  const pendientes = canciones.filter((c) => c.pendiente).length;
+  if (pendientes) partes.push(`${pendientes} sin analizar (se analizan al abrirlas)`);
   const libre = await espacioDisponible();
   if (libre !== null) partes.push(`${formatoTamano(libre)} libres`);
   const persistente = await esPersistente();
@@ -648,6 +672,12 @@ function limpiarFormulario() {
   nombreJson.textContent = "Lo analiza el celu";
   inputNombre.value = "";
   inputLista.value = "";
+  // Agregar varias
+  inputVarias.value = "";
+  inputCarpeta.value = "";
+  inputListaLote.value = "";
+  archivosLote = [];
+  lote.hidden = true;
   mostrarAviso("");
   revisarFormulario();
 }
@@ -822,6 +852,95 @@ async function analizarConProgreso(mp3, nombre) {
 
 botonCancelarAnalisis.addEventListener("click", () => {
   if (controladorAnalisis) controladorAnalisis.abort();
+  cancelarLote = true;   // si se estaban guardando varias canciones, se para ahí
+});
+
+/* ==================================================================
+   Agregar varias canciones a la vez
+
+   Se eligen muchos mp3 juntos (o una carpeta, si el navegador lo permite),
+   se guardan enseguida SIN analizar (marcadas como "pendiente") y cada una
+   se analiza la primera vez que se abre (ver cargarCancion).
+   ================================================================== */
+
+const inputVarias = document.getElementById("input-varias");
+const inputCarpeta = document.getElementById("input-carpeta");
+const opcionCarpeta = document.getElementById("opcion-carpeta");
+const lote = document.getElementById("lote");
+const resumenLote = document.getElementById("resumen-lote");
+const inputListaLote = document.getElementById("input-lista-lote");
+const guardarLote = document.getElementById("guardar-lote");
+
+let archivosLote = [];
+let cancelarLote = false;
+
+// Elegir una carpeta: en la compu sí; en los celulares el navegador no lo permite
+// (Android solo deja elegir varios archivos), así que ahí no se ofrece.
+const esCelular = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+opcionCarpeta.hidden = !("webkitdirectory" in HTMLInputElement.prototype) || esCelular;
+
+function prepararLote(archivos, carpeta) {
+  // Solo los audios, en orden alfabético.
+  archivosLote = [...archivos]
+    .filter((a) => a.type.startsWith("audio/") || /\.mp3$/i.test(a.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  if (archivosLote.length === 0) {
+    lote.hidden = true;
+    mostrarAviso("No elegiste ningún mp3.");
+    return;
+  }
+  mostrarAviso("");
+  const n = archivosLote.length;
+  resumenLote.textContent = `${n === 1 ? "1 canción elegida" : `${n} canciones elegidas`}. `
+    + "Se guardan sin analizar; cada una se analiza la primera vez que la abrís.";
+  if (carpeta) inputListaLote.value = carpeta;          // propuesta: el nombre de la carpeta
+  guardarLote.textContent = n === 1 ? "Guardar 1 canción" : `Guardar ${n} canciones`;
+  lote.hidden = false;
+}
+
+inputVarias.addEventListener("change", () => prepararLote(inputVarias.files, null));
+inputCarpeta.addEventListener("change", () => {
+  const primero = inputCarpeta.files[0];
+  const carpeta = primero && primero.webkitRelativePath ? primero.webkitRelativePath.split("/")[0] : null;
+  prepararLote(inputCarpeta.files, carpeta);
+});
+
+guardarLote.addEventListener("click", async () => {
+  const nombreLista = inputListaLote.value.replace(/\s+/g, " ").trim();
+  const total = archivosLote.length;
+  cancelarLote = false;
+  capaProgreso.hidden = false;
+  let guardadas = 0;
+  try {
+    // Al revés: cada una queda primera en la lista, así la lista termina en orden alfabético.
+    for (const archivo of archivosLote.slice().reverse()) {
+      if (cancelarLote) break;
+      textoProgreso.textContent = `Guardando ${guardadas + 1} de ${total}…`;
+      barraProgreso.value = guardadas / total;
+      await guardarCancion({
+        nombre: archivo.name.replace(/\.[^.]+$/, ""),
+        tonalidad: "",
+        tempo: 0,
+        acordes: [],
+        pendiente: true,            // se analiza al abrirla
+        ajuste: 0,
+        tamanoMp3: archivo.size,
+        agregada: Date.now(),
+      }, archivo, nombreLista);
+      guardadas++;
+    }
+  } catch (error) {
+    const sinEspacio = error && error.name === "QuotaExceededError";
+    alert((sinEspacio ? "No hay más espacio en el celular." : "No pude guardar una de las canciones: " + error.message)
+      + `\nSe guardaron ${guardadas} de ${total}.`);
+  } finally {
+    capaProgreso.hidden = true;
+  }
+  archivosLote = [];
+  lote.hidden = true;
+  await pedirPersistencia();
+  volverABiblioteca();
+  mostrarMensaje(guardadas === 1 ? "1 canción guardada" : `${guardadas} canciones guardadas`);
 });
 
 /* ==================================================================
@@ -855,6 +974,25 @@ async function cargarCancion(id) {
     alert("No encontré esa canción en la biblioteca.");
     mostrarBiblioteca();
     return false;
+  }
+
+  // Agregada junto con otras sin analizar: se analiza ahora, la primera vez que se abre.
+  if (cancion.pendiente) {
+    let datos;
+    try {
+      datos = await analizarConProgreso(mp3, cancion.nombre);
+    } catch (error) {
+      alert("No pude analizar la canción: " + error.message);
+      return false;
+    }
+    if (!datos) return false;               // canceló: queda pendiente para la próxima
+    try {
+      await actualizarAnalisis(id, datos);  // guarda los acordes y saca la marca de pendiente
+    } catch (error) {
+      alert("No pude guardar el análisis: " + error.message);
+      return false;
+    }
+    cancion = { ...cancion, ...datos, pendiente: false };
   }
 
   if (audio.src) URL.revokeObjectURL(audio.src); // liberamos la anterior (al recargar)
@@ -1201,9 +1339,14 @@ const valorAjusteMetronomo = document.getElementById("valor-ajuste-metronomo");
 // y ajuste fino del metrónomo, también en milisegundos (+ = el clic suena más tarde).
 let demoraAudio = null;
 let ajusteMetronomo = 0;
+// Cómo salió la última medición: si el valor es creíble y un resumen para mostrar.
+let detalleDemora = null;
 try {
   const guardada = JSON.parse(localStorage.getItem("demoraAudio"));
-  if (guardada && typeof guardada.ms === "number") demoraAudio = guardada.ms;
+  if (guardada && typeof guardada.ms === "number") {
+    demoraAudio = guardada.ms;
+    detalleDemora = guardada.detalle || null;
+  }
   const fino = Number(localStorage.getItem("ajusteMetronomo"));
   if (isFinite(fino)) ajusteMetronomo = fino;
 } catch {
@@ -1227,8 +1370,16 @@ function posicionQueSuena(conSalida) {
 }
 
 function mostrarDemora(texto) {
-  textoDemora.textContent = texto
-    || (demoraAudio === null ? "Demora del audio: se mide al reproducir a x1" : `Demora del audio: ${Math.round(demoraAudio)} ms`);
+  let normal;
+  if (demoraAudio === null) {
+    normal = "Demora del audio: se mide al reproducir a x1";
+  } else {
+    normal = `Demora del audio: ${Math.round(demoraAudio)} ms`;
+    // Si la medición no convenció, se avisa y se muestra el detalle.
+    if (detalleDemora && !detalleDemora.creible) normal += ` ⚠ poco creíble (${detalleDemora.resumen}). Probá “Medir de nuevo” en una parte con banda completa.`;
+  }
+  textoDemora.textContent = texto || normal;
+  textoDemora.classList.toggle("aviso-demora", !texto && !!detalleDemora && !detalleDemora.creible);
   valorAjusteMetronomo.textContent = `${ajusteMetronomo > 0 ? "+" : ajusteMetronomo < 0 ? "−" : ""}${Math.abs(ajusteMetronomo)} ms`;
   metronomoAntes.disabled = ajusteMetronomo <= -300;
   metronomoDespues.disabled = ajusteMetronomo >= 300;
@@ -1247,10 +1398,22 @@ function parecido(captura, cancion, inicio, paso) {
 
 let midiendoDemora = false;
 
-/**
- * Mide la demora mientras suena la canción (a x1). Toma 8 muestras del audio
- * que pasa por el contexto, busca en qué parte del mp3 están, y se queda con
- * la mediana de los corrimientos (si al menos 4 coincidieron con claridad).
+/*
+ * Mide la demora mientras suena la canción (a x1). Toma hasta 12 muestras del
+ * audio que pasa por el contexto, busca en qué parte del mp3 está cada una y
+ * se queda con la mediana de los corrimientos.
+ *
+ * Cuidados (en un Android la medición dio 2 ms, contra 157 en la compu):
+ *   - Se busca en un rango amplio (de -1,5 s a +0,3 s): en los celulares la
+ *     demora puede ser bastante mayor que en la compu.
+ *   - Un riff que se repite cada pulso hace que el audio "de ahora" se parezca
+ *     mucho al de medio segundo antes: la comparación puede encontrar una
+ *     coincidencia falsa (por ejemplo, cerca de 0 ms). Por eso la captura es
+ *     más larga (≈0,7 s) y se descarta cada muestra donde hay un segundo
+ *     corrimiento casi tan bueno como el mejor (ambigua).
+ *   - Hacen falta al menos 5 muestras claras y que coincidan entre sí.
+ *   - Un resultado menor a 20 ms, o con muestras que no coinciden, se guarda
+ *     pero se marca como "poco creíble" y se avisa en el panel.
  * Devuelve la demora en ms, o null si no se pudo medir.
  */
 async function medirDemora() {
@@ -1263,11 +1426,13 @@ async function medirDemora() {
     const cancion = await decodificarMp3(await obtenerAudio(id));
     const fr = 22050;
     const analizador = contextoAudio.createAnalyser();
-    analizador.fftSize = 16384;
+    analizador.fftSize = 32768;                      // el máximo: ≈0,7 s de audio
     fuenteCancion.connect(analizador);
     const corrimientos = [];
-    for (let n = 0; n < 8 && !audio.paused && id === idActual && audio.playbackRate === 1; n++) {
-      await new Promise((r) => setTimeout(r, 300));
+    let ambiguas = 0, sinCoincidencia = 0, sumaParecido = 0;
+    const separacionMinima = Math.round(0.04 * fr);  // dos picos a menos de 40 ms son el mismo
+    for (let n = 0; n < 12 && !audio.paused && id === idActual && audio.playbackRate === 1; n++) {
+      await new Promise((r) => setTimeout(r, 400));
       const bruto = new Float32Array(analizador.fftSize);
       analizador.getFloatTimeDomainData(bruto);
       const posicion = audio.currentTime;
@@ -1277,27 +1442,51 @@ async function medirDemora() {
       for (let i = 0; i < captura.length; i++) captura[i] = bruto[Math.floor(i * sr / fr)];
       // La captura TERMINA en lo que pasa ahora; según audio.currentTime, eso es "posicion".
       const supuesto = Math.round((posicion - captura.length / fr) * fr);
-      // Primero una búsqueda gruesa (de -0,8 s a +0,2 s, de a 8 muestras) y después fina.
-      let mejor = -1, mejorLag = 0;
-      for (let lag = -0.8 * fr; lag <= 0.2 * fr; lag += 8) {
-        const r = parecido(captura, cancion, supuesto + lag, 4);
-        if (r > mejor) { mejor = r; mejorLag = lag; }
+
+      // Búsqueda gruesa (de a 8 muestras), anotando el parecido de cada corrimiento.
+      const lags = [], valores = [];
+      for (let lag = Math.round(-1.5 * fr); lag <= Math.round(0.3 * fr); lag += 8) {
+        lags.push(lag);
+        valores.push(parecido(captura, cancion, supuesto + lag, 8));
       }
-      for (let lag = mejorLag - 8; lag <= mejorLag + 8; lag++) {
+      let k = 0;
+      for (let j = 1; j < valores.length; j++) if (valores[j] > valores[k]) k = j;
+      // El segundo mejor, lejos del primero: si es casi igual, la muestra es ambigua.
+      let segundo = -1;
+      for (let j = 0; j < valores.length; j++) {
+        if (Math.abs(lags[j] - lags[k]) > separacionMinima && valores[j] > segundo) segundo = valores[j];
+      }
+      // Ajuste fino alrededor del mejor, muestra por muestra.
+      let mejor = -1, mejorLag = lags[k];
+      for (let lag = lags[k] - 16; lag <= lags[k] + 16; lag++) {
         const r = parecido(captura, cancion, supuesto + lag, 1);
         if (r > mejor) { mejor = r; mejorLag = lag; }
       }
-      if (mejor > 0.8) corrimientos.push(-mejorLag / fr * 1000);   // ms que el audio va atrasado
+      if (mejor < 0.8) { sinCoincidencia++; continue; }
+      if (segundo > 0.95 * valores[k]) { ambiguas++; continue; }
+      sumaParecido += mejor;
+      corrimientos.push(-mejorLag / fr * 1000);       // ms que el audio va atrasado
     }
     analizador.disconnect();
-    if (corrimientos.length < 4) {
+    if (corrimientos.length < 5) {
       mostrarDemora();
       return null;
     }
     corrimientos.sort((a, b) => a - b);
-    demoraAudio = Math.max(0, Math.min(1000, corrimientos[corrimientos.length >> 1]));
+    const mediana = corrimientos[corrimientos.length >> 1];
+    // Dispersión: la mitad central de las muestras (rango intercuartil).
+    const dispersion = corrimientos[Math.floor(corrimientos.length * 0.75)] - corrimientos[Math.floor(corrimientos.length * 0.25)];
+    const creible = mediana >= 20 && dispersion <= 30;
+    detalleDemora = {
+      creible,
+      resumen: `${corrimientos.length} de ${corrimientos.length + ambiguas + sinCoincidencia} muestras, dispersión ${Math.round(dispersion)} ms`
+        + `${ambiguas ? `, ${ambiguas} ambiguas` : ""}`
+        + `, salida ${Math.round(1000 * (contextoAudio.outputLatency || 0))} ms`
+        + `, parecido ${(sumaParecido / corrimientos.length).toFixed(2)}`,
+    };
+    demoraAudio = Math.max(0, Math.min(1500, mediana));
     try {
-      localStorage.setItem("demoraAudio", JSON.stringify({ ms: demoraAudio, medida: Date.now() }));
+      localStorage.setItem("demoraAudio", JSON.stringify({ ms: demoraAudio, medida: Date.now(), detalle: detalleDemora }));
     } catch {
       // queda para esta sesión
     }

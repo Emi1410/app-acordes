@@ -315,6 +315,7 @@ function actualizarAnalisis(id, { tonalidad, tempo, acordes, pulsos, compases })
         almacen.put({
           ...pedido.result, tonalidad, tempo, acordes, pulsos, compases,
           acordesOriginales: null, editada: false,
+          pendiente: false,   // ya está analizada (por si se había agregado sin analizar)
         });
       }
     });
