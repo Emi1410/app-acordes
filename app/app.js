@@ -953,6 +953,10 @@ let contextoActual = { tipo: "todas" };
 // Abre una canción de la biblioteca en el reproductor.
 async function abrirCancion(id, contexto = { tipo: "todas" }) {
   contextoActual = contexto;
+  // Se prepara el audio ya, con el toque que abre la canción: así la salida de
+  // sonido del celular está andando antes del play y la canción no arranca
+  // mientras el sistema todavía la está levantando.
+  asegurarAudio();
   if (!(await cargarCancion(id))) return;
   abrirPantalla("reproductor");
   // Opción del panel "Más": que arranque sola al abrirla.
@@ -1502,9 +1506,24 @@ async function medirDemora() {
 }
 
 // La primera vez que suena una canción a x1 en este dispositivo, se mide sola.
+// Cuidados para no molestar al arranque de la canción (en un celular, medir
+// decodifica el mp3 entero y exige al procesador varios segundos):
+//   - empieza recién 8 s después del play, con la canción ya andando;
+//   - se intenta una sola vez por sesión: si no sale, no se reintenta en cada
+//     play (para eso está "Medir de nuevo").
+const ESPERA_MEDICION_AUTOMATICA = 8000;
+let medicionAutomaticaIntentada = false;
+let temporizadorMedicion = null;
 audio.addEventListener("play", () => {
-  if (demoraAudio === null) setTimeout(() => { if (demoraAudio === null) medirDemora(); }, 1500);
+  if (demoraAudio !== null || medicionAutomaticaIntentada) return;
+  clearTimeout(temporizadorMedicion);
+  temporizadorMedicion = setTimeout(() => {
+    if (demoraAudio !== null || medicionAutomaticaIntentada || audio.paused || audio.playbackRate !== 1) return;
+    medicionAutomaticaIntentada = true;
+    medirDemora();
+  }, ESPERA_MEDICION_AUTOMATICA);
 });
+audio.addEventListener("pause", () => clearTimeout(temporizadorMedicion));
 
 botonMedirDemora.addEventListener("click", async () => {
   if (audio.paused || audio.playbackRate !== 1) {
