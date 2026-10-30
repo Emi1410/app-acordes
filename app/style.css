@@ -1842,17 +1842,22 @@ body {
 }
 
 /* Notas que suenan: Guitarra 1 en amarillo y Guitarra 2 en celeste */
+/* El borde oscuro separa el punto de la cuerda que pasa por debajo */
 .mastil-nota-1 {
   fill: #f5b83d;
+  stroke: #0b0d10;
+  stroke-width: 1.4;
 }
 
 .mastil-nota-2 {
-  fill: #5ec8f2;
+  fill: #7fd6f7;
+  stroke: #0b0d10;
+  stroke-width: 1.4;
 }
 
 .mastil-nota-texto {
-  fill: #111418;
-  font-size: 8.5px;
+  fill: #0b0d10;
+  font-size: 9px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: central;
@@ -1913,4 +1918,822 @@ body {
 /* Un poco menos de espacio entre filas, para que entre todo sin desplazarse */
 .hoja-contenido {
   gap: 5px;
+}
+
+/* ==================================================================
+   Pantalla completa, grilla por vueltas y partes de la canción
+   ================================================================== */
+
+/* Botón de pantalla completa: muestra "agrandar" o "achicar" según el estado */
+.boton-pantalla-completa {
+  flex: none;
+  width: 42px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boton-pantalla-completa svg {
+  width: 20px;
+  height: 20px;
+}
+
+.boton-pantalla-completa .icono-achicar,
+.boton-pantalla-completa[aria-pressed="true"] .icono-agrandar {
+  display: none;
+}
+
+.boton-pantalla-completa[aria-pressed="true"] .icono-achicar {
+  display: block;
+}
+
+/* La barra de Tabs (zoom, "Pistas y sync") va en la misma fila que el selector
+   de vistas; en vertical baja a un renglón propio. */
+.fila-vista {
+  flex-wrap: wrap;
+}
+
+.fila-vista .barra-tabs {
+  flex: 1 1 100%;
+}
+
+/* Barra de la grilla: largo de la vuelta y partes */
+.barra-grilla {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--texto-suave);
+  font-size: 0.85rem;
+}
+
+.barra-grilla .boton-chico {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+
+.barra-grilla output {
+  min-width: 78px;
+  color: var(--texto);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+#vuelta-auto[aria-pressed="true"] {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+.boton-partes {
+  margin-left: auto;
+}
+
+/* Grilla: grupos de vueltas (uno por parte), renglones de compases */
+.grilla-vueltas {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.grupo-vueltas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 7px;
+  border-left: 3px solid var(--color-parte, transparent);
+}
+
+.titulo-grupo {
+  margin: 2px 0 0;
+  color: var(--color-parte, var(--texto-suave));
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.vuelta {
+  display: grid;
+  grid-template-columns: repeat(var(--compases, 4), minmax(0, 1fr));
+  gap: 4px;
+}
+
+/* Un compás; si tiene acordes de paso, se divide según los pulsos de cada uno */
+.compas-grilla {
+  display: flex;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--superficie);
+  cursor: pointer;
+  user-select: none;
+}
+
+.trozo {
+  flex-basis: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+}
+
+.trozo + .trozo {
+  border-left: 1px dashed var(--borde);
+}
+
+.trozo b {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 1rem;
+}
+
+/* El mismo acorde que venía del compás anterior: más apagado (como "%" en un cifrado) */
+.trozo.sigue b {
+  color: var(--texto-suave);
+  font-weight: 500;
+}
+
+.compas-grilla.pasado {
+  opacity: 0.5;
+}
+
+.compas-grilla.actual {
+  border-color: var(--acento);
+}
+
+.trozo.sonando {
+  background: var(--acento);
+  color: var(--acento-texto);
+}
+
+.trozo.sonando b {
+  color: var(--acento-texto);
+}
+
+/* Pulsos: la parte que suena, con su color */
+.leyenda-parte {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 10px;
+  overflow: hidden;
+  border: 1px solid var(--color-parte, var(--borde));
+  border-radius: 999px;
+  background: none;
+  color: var(--color-parte, var(--texto));
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.leyenda-parte::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-parte, var(--texto-suave));
+}
+
+.leyenda-parte.antes {
+  opacity: 0.6;
+}
+
+/* En la tira, una franja arriba con el color de la parte de cada pulso */
+.pulso.con-parte {
+  box-shadow: inset 0 3px 0 var(--color-parte);
+}
+
+.pulso.inicio-parte {
+  border-left-color: var(--color-parte);
+}
+
+/* Ventana de partes */
+.lista-partes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lista-partes li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(0, 1.3fr) 30px;
+  align-items: center;
+  gap: 6px;
+  padding-left: 6px;
+  border-left: 4px solid var(--color-parte);
+}
+
+.lista-partes select,
+.lista-partes input,
+.caja-cifrado textarea,
+.campo select {
+  min-height: 34px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.minuto-parte,
+.borrar-parte {
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.borrar-parte {
+  font-size: 1.1rem;
+  color: var(--texto-suave);
+}
+
+.acciones-partes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.caja-cifrado {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.caja-cifrado textarea {
+  min-height: 130px;
+  padding: 8px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  resize: vertical;
+}
+
+/* ==================================================================
+   Celular: todavía más compacto (vertical y horizontal)
+
+   Solo en pantallas chicas: en la compu todo queda como estaba.
+   ================================================================== */
+@media (max-width: 600px), (max-height: 500px) {
+  :root {
+    --alto-boton: 38px;
+  }
+
+  html {
+    font-size: 13.5px;
+  }
+
+  body {
+    gap: 6px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  }
+
+  .pantalla-completa {
+    gap: 6px;
+  }
+
+  .boton {
+    border-radius: 10px;
+  }
+
+  /* Encabezado */
+  .encabezado {
+    min-height: 34px;
+    gap: 6px;
+  }
+
+  .boton-volver {
+    width: 36px;
+    height: 34px;
+    min-height: 34px;
+    font-size: 1.05rem;
+  }
+
+  .encabezado .boton-chico {
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 0.82rem;
+  }
+
+  .boton-pantalla-completa {
+    width: 36px;
+  }
+
+  .encabezado .titulo {
+    font-size: 0.82rem;
+  }
+
+  .posicion-lista {
+    font-size: 0.7rem;
+  }
+
+  /* Selector de vistas y barra de Tabs */
+  .fila-vista {
+    gap: 6px;
+  }
+
+  .selector-vista {
+    padding: 2px;
+    border-radius: 10px;
+  }
+
+  .selector-vista button {
+    min-height: 30px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+  }
+
+  .barra-tabs .boton-chico,
+  .barra-grilla .boton-chico {
+    min-height: 30px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+  }
+
+  .zoom-tabs output {
+    min-width: 38px;
+    font-size: 0.78rem;
+  }
+
+  /* Tira y diagramas */
+  .pulso {
+    width: 38px;
+    height: 40px;
+    font-size: 0.92rem;
+  }
+
+  .nombre-par {
+    font-size: 1.3rem;
+  }
+
+  .diagrama-par {
+    min-height: 80px;
+    max-width: 130px;
+  }
+
+  /* Vista Grilla: acorde, diagrama y el que sigue en una sola fila, para
+     dejarle el lugar a la grilla de vueltas */
+  #vista-grilla {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+
+  #vista-grilla[hidden] {
+    display: none;
+  }
+
+  .acorde-actual {
+    font-size: 2.6rem;
+  }
+
+  .diagrama-actual {
+    margin: 0;
+  }
+
+  .diagrama-actual .diagrama {
+    width: 66px;
+  }
+
+  .siguiente {
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.95rem;
+  }
+
+  .diagrama-siguiente .diagrama {
+    width: 40px;
+  }
+
+  #cuenta-regresiva {
+    font-size: 0.8rem;
+  }
+
+  .compas-grilla {
+    min-height: 36px;
+  }
+
+  .trozo b {
+    font-size: 0.92rem;
+  }
+
+  /* Los controles de reproducción siempre abajo de todo (también en Grilla) */
+  .reproductor {
+    order: 10;
+  }
+
+  .transporte {
+    gap: 3px;
+  }
+
+  .boton-icono {
+    max-width: 48px;
+    height: 36px;
+    min-height: 36px;
+    font-size: 0.8rem;
+  }
+
+  .boton-icono svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .boton-play {
+    width: 42px;
+    height: 42px;
+    font-size: 1.15rem;
+  }
+
+  .boton-mas small {
+    font-size: 0.65rem;
+  }
+
+  .barra input {
+    height: 22px;
+  }
+
+  .tiempos {
+    font-size: 0.72rem;
+  }
+
+  /* Paneles */
+  .hoja-contenido {
+    gap: 5px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  .acciones-cancion .boton-chico,
+  .selector-fuente,
+  .fila-opcion select {
+    min-height: 32px;
+    font-size: 0.82rem;
+  }
+
+  .paso button {
+    min-height: 32px;
+  }
+}
+
+/* ==================================================================
+   Celular acostado (horizontal): el contenido manda
+
+   - Encabezado en un solo renglón chico (nombre cortado con "…").
+   - Una barra fina con el selector de vistas y, en Tabs, el zoom y
+     "Pistas y sync".
+   - Abajo, otra barra fina con todos los controles y la barra de tiempo.
+   - En el medio, en dos columnas: en Tabs la tablatura (todo el alto) y el
+     mástil al lado; en Grilla el acorde que suena y las vueltas; en
+     Pulsos la tira arriba y los dos diagramas con sus nombres al costado.
+   ================================================================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  body {
+    gap: 0;
+    padding: 4px calc(8px + env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left));
+  }
+
+  #pantalla-reproductor {
+    display: grid;
+    grid-template-columns: minmax(170px, 28%) minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 4px;
+  }
+
+  #pantalla-reproductor[hidden] {
+    display: none;
+  }
+
+  /* Encabezado: un renglón, sin la línea de la lista */
+  .encabezado {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 28px;
+  }
+
+  .boton-volver,
+  .encabezado .boton-chico {
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .encabezado .titulo {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    font-size: 0.8rem;
+  }
+
+  .posicion-lista {
+    display: none;
+  }
+
+  /* Barra fina: vistas + (en Tabs) Ahora, zoom y Pistas y sync */
+  .fila-vista {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .fila-vista .selector-vista {
+    flex: 0 0 auto;
+    width: 250px;
+  }
+
+  .selector-vista button {
+    min-height: 26px;
+  }
+
+  .fila-vista .barra-tabs {
+    flex: 1 1 auto;
+  }
+
+  .barra-tabs .boton-chico,
+  .barra-grilla .boton-chico {
+    min-height: 26px;
+  }
+
+  .indicador-acordes {
+    grid-column: 1;
+    grid-row: 3;
+    margin: 0;
+  }
+
+  /* Pulsos, Tabs y el editor ocupan las dos columnas */
+  .vista-pulsos,
+  .vista-tabs,
+  .barra-edicion {
+    grid-column: 1 / -1;
+    grid-row: 3 / 5;
+    min-height: 0;
+  }
+
+  /* Pulsos: la tira arriba; abajo los diagramas con el nombre al costado */
+  .vista-pulsos {
+    gap: 4px;
+  }
+
+  .par-diagramas {
+    gap: 6px;
+  }
+
+  .columna-diagrama {
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .diagrama-par {
+    width: auto;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .diagrama-par .diagrama {
+    width: auto;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  /* Tabs: la tablatura con todo el alto y el mástil al costado */
+  .vista-tabs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 38%);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 4px 8px;
+  }
+
+  .vista-tabs[hidden] {
+    display: none;
+  }
+
+  .vista-tabs .aviso-pulsos {
+    grid-column: 1 / -1;
+  }
+
+  .caja-tabs {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+  }
+
+  .mastil {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: center;
+  }
+
+  /* Grilla: el acorde que suena a la izquierda, las vueltas a la derecha */
+  #vista-grilla {
+    grid-column: 1;
+    grid-row: 4;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .barra-grilla {
+    grid-column: 2;
+    grid-row: 3;
+  }
+
+  .grilla-vueltas {
+    grid-column: 2;
+    grid-row: 4;
+  }
+
+  .acorde-actual {
+    font-size: 2.4rem;
+  }
+
+  .siguiente {
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  /* Abajo: una sola barra fina con los controles y la barra de tiempo */
+  .reproductor {
+    grid-column: 1 / -1;
+    grid-row: 5;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .transporte {
+    display: flex;
+    flex: none;
+    order: -1;
+  }
+
+  .boton-icono {
+    width: 40px;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  .boton-play {
+    width: 34px;
+    height: 34px;
+    font-size: 1rem;
+  }
+
+  .barra {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .barra input {
+    flex: 1;
+    order: 1;
+  }
+
+  .tiempos {
+    display: contents;
+  }
+
+  #tiempo-actual {
+    order: 0;
+  }
+
+  #tiempo-total {
+    order: 2;
+  }
+
+  /* En modo edición: la tira arriba y la barra del editor abajo (sin los
+     diagramas, que no entrarían) */
+  #pantalla-reproductor.editando .vista-pulsos {
+    grid-row: 3;
+  }
+
+  #pantalla-reproductor.editando .par-diagramas {
+    display: none;
+  }
+
+  /* Panel "Más" en dos columnas, para que entre casi todo sin desplazarse */
+  #panel-opciones .hoja-contenido {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 5px 16px;
+  }
+
+  #panel-opciones .acciones-cancion {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  #panel-opciones .fila-interruptores,
+  #boton-cerrar-opciones {
+    grid-column: 1 / -1;
+  }
+
+  /* Filas del panel más angostas (cada columna mide la mitad) */
+  #panel-opciones .paso {
+    grid-template-columns: 76px 38px minmax(0, 1fr) 38px auto;
+    gap: 5px;
+  }
+
+  #panel-opciones .paso button {
+    min-width: 38px;
+    min-height: 30px;
+  }
+
+  #panel-opciones .paso output {
+    font-size: 0.95rem;
+    white-space: nowrap;
+  }
+
+  #panel-opciones .fila-opcion {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  #panel-opciones .control-volumen {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+
+  #panel-opciones .fila-demora {
+    font-size: 0.75rem;
+  }
+
+  #panel-opciones .acciones-cancion .boton-chico,
+  #panel-opciones .selector-fuente {
+    min-height: 30px;
+    font-size: 0.78rem;
+    line-height: 1.1;
+  }
+
+  /* Barras de arriba y de abajo todavía más finas: lugar para la tablatura */
+  .boton-volver,
+  .encabezado .boton-chico {
+    height: 26px;
+    min-height: 26px;
+  }
+
+  .encabezado {
+    min-height: 26px;
+  }
+
+  .selector-vista button {
+    min-height: 24px;
+  }
+
+  .barra-tabs .boton-chico,
+  .barra-grilla .boton-chico {
+    min-height: 24px;
+  }
+
+  #pantalla-reproductor {
+    row-gap: 3px;
+  }
+
+  .boton-icono {
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .boton-play {
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+  }
+
+  /* "Más x1" en un solo renglón, del alto de los otros botones */
+  .boton-mas {
+    flex-direction: row;
+    gap: 4px;
+    width: auto;
+    max-width: none;
+    padding: 0 8px;
+  }
+
+  #pantalla-reproductor.editando .barra-edicion {
+    grid-row: 4;
+    overflow-y: auto;
+  }
 }

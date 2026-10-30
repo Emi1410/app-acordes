@@ -73,6 +73,7 @@ const vistaPulsos = document.getElementById("vista-pulsos");
 const vistaGrilla = document.getElementById("vista-grilla");
 const botonVistaTabs = document.getElementById("boton-vista-tabs");
 const vistaTabs = document.getElementById("vista-tabs");   // la maneja tablaturas.js
+const barraTabs = document.getElementById("barra-tabs");   // zoom y "Pistas y sync" (solo en Tabs)
 const avisoPulsos = document.getElementById("aviso-pulsos");
 const tira = document.getElementById("tira");
 const diagramaAhora = document.getElementById("diagrama-ahora");
@@ -790,6 +791,8 @@ botonGuardar.addEventListener("click", async () => {
       // Preferencias exportadas con la canción (si vienen y son válidas).
       ...preferenciasImportadas(datos),
       ajuste: typeof datos.ajuste === "number" ? Math.round(datos.ajuste * 10) / 10 : 0,
+      // Partes de la canción (Intro, Estrofa...), si el JSON las trae (partes.js).
+      partes: partesValidas(datos.partes),
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
     }, mp3Elegido, inputLista.value);   // si hay lista, se agrega en la misma operación
@@ -1344,19 +1347,29 @@ function reproducirCancion() {
 }
 
 /* ------------------------------------------------------------------
-   Demora del audio (se mide y se guarda por dispositivo)
+   Demora del audio (se mide sola mientras suena)
 
-   El reproductor informa en audio.currentTime qué parte de la canción
-   está "entregando", pero ese audio tarda un poco en pasar al AudioContext
-   (Chrome lo junta en un buffer). En la compu son unos 157 ms; en cada
-   celular es distinto. Sin compensarlo, el clic del metrónomo sale antes
-   del golpe y la tira va adelantada.
+   audio.currentTime dice qué parte del mp3 está "entregando" el
+   reproductor, pero ese audio tarda un poco en pasar al AudioContext
+   (Chrome lo junta en un buffer). Esa demora NO es fija: cambia en cada
+   play (en la misma compu se midieron 0, 2, 26 y 157 ms según cómo
+   arrancó la reproducción). Por eso se mide en cada play y se sigue
+   midiendo mientras suena:
+     - Se escucha lo que pasa por el contexto (≈0,7 s) y se busca en qué
+       parte del mp3 decodificado coincide: el corrimiento es la demora.
+     - Después de cada play (y de cada salto o cambio de velocidad) se
+       toman muestras seguidas hasta tener 3 buenas; después, una cada 15 s.
+     - La demora que se usa es la mediana de las muestras de ESTE play.
+       Hasta tener la primera se usa la última medida (guardada en el
+       navegador de este dispositivo).
+   El mp3 se decodifica una sola vez por canción, recién 8 s después del
+   primer play (decodificar exige al procesador y no tiene que molestar al
+   arranque). Las muestras siguientes buscan cerca de la demora conocida
+   (±250 ms), así que cuestan unos pocos milisegundos.
 
-   Para medirlo escuchamos el audio que realmente pasa por el contexto y lo
-   comparamos con el mp3 decodificado: el corrimiento que mejor coincide es
-   la demora. Se mide sola la primera vez que suena una canción a x1, se
-   guarda en el navegador (vale para este dispositivo) y se puede volver a
-   medir desde el panel "Más".
+   Aparte está la demora del contexto al parlante (la "salida"): la da el
+   navegador con getOutputTimestamp() u outputLatency, y se lee en cada
+   cuadro (cambia si se conectan auriculares Bluetooth, por ejemplo).
    ------------------------------------------------------------------ */
 
 const textoDemora = document.getElementById("texto-demora");
@@ -1365,29 +1378,64 @@ const metronomoAntes = document.getElementById("metronomo-antes");
 const metronomoDespues = document.getElementById("metronomo-despues");
 const valorAjusteMetronomo = document.getElementById("valor-ajuste-metronomo");
 
-// Demora medida en milisegundos (null = todavía no se midió en este dispositivo)
+// Demora que se usa, en milisegundos (null = nunca se midió en este dispositivo)
 // y ajuste fino del metrónomo, también en milisegundos (+ = el clic suena más tarde).
 let demoraAudio = null;
 let ajusteMetronomo = 0;
-// Cómo salió la última medición: si el valor es creíble y un resumen para mostrar.
+// Cómo salió la medición: si las muestras coinciden y un resumen para mostrar.
 let detalleDemora = null;
 try {
   const guardada = JSON.parse(localStorage.getItem("demoraAudio"));
-  if (guardada && typeof guardada.ms === "number") {
-    demoraAudio = guardada.ms;
-    detalleDemora = guardada.detalle || null;
-  }
+  if (guardada && typeof guardada.ms === "number") demoraAudio = guardada.ms;
   const fino = Number(localStorage.getItem("ajusteMetronomo"));
   if (isFinite(fino)) ajusteMetronomo = fino;
 } catch {
   // sin localStorage: se mide en cada sesión
 }
 
+const ESPERA_PRIMERA_DECODIFICACION = 8;   // segundos sonando antes de decodificar el mp3
+const MUESTRAS_SEGUIDAS = 3;               // al arrancar: muestras cada 1 s hasta tener estas
+const ENTRE_MUESTRAS = 15000;              // después, una cada 15 s
+const VENTANA_CERCA = 0.25;                // segundos alrededor de la demora conocida
+
+let muestrasDemora = [];         // demoras (ms) medidas en este play
+let fallosSeguidos = 0;          // muestras seguidas que no sirvieron
+let temporizadorMuestra = null;
+let inicioDelPlay = 0;           // performance.now() del último play
+let decodificada = null;         // { id, promesa, datos } del mp3 de la canción abierta
+let analizadorDemora = null;     // analizador conectado a la canción (se crea una vez)
+let salidaSuavizada = null;
+
+/**
+ * Demora desde el contexto hasta el parlante, en segundos.
+ * getOutputTimestamp() dice qué instante del reloj del contexto está
+ * saliendo por el parlante (contextTime) y cuándo fue (performanceTime):
+ * lo que falta para que salga lo que el contexto procesa ahora es la demora.
+ * Si no está, se usa outputLatency (o baseLatency, en navegadores viejos).
+ */
+function latenciaSalida() {
+  if (!contextoAudio) return 0;
+  let valor = contextoAudio.outputLatency || 0;
+  if (contextoAudio.getOutputTimestamp) {
+    const marca = contextoAudio.getOutputTimestamp();
+    if (marca && marca.contextTime > 0 && marca.performanceTime > 0) {
+      const saliendoAhora = marca.contextTime + (performance.now() - marca.performanceTime) / 1000;
+      const medida = contextoAudio.currentTime - saliendoAhora;
+      if (medida > 0 && medida < 1) valor = Math.max(valor, medida);
+    }
+  }
+  if (!valor) valor = contextoAudio.baseLatency || 0;
+  // Se suaviza: la medida salta de a un bloque de audio (unos milisegundos).
+  salidaSuavizada = salidaSuavizada === null ? valor : salidaSuavizada + 0.05 * (valor - salidaSuavizada);
+  return salidaSuavizada;
+}
+
 /**
  * Posición de la canción que REALMENTE se está escuchando, en segundos.
- *   conSalida: además resta la demora hasta el parlante (para la tira y los
- *   diagramas, que tienen que coincidir con lo que se oye). El metrónomo no
- *   la necesita: el clic sale por el mismo camino que la canción.
+ *   conSalida: además resta la demora hasta el parlante (para la tira, los
+ *   diagramas y el cursor de la tablatura, que tienen que coincidir con lo
+ *   que se oye). El metrónomo no la necesita: el clic sale por el mismo
+ *   camino que la canción.
  * En pausa no se resta nada: al dar play se escucha desde audio.currentTime.
  * La demora es en tiempo real; a otra velocidad equivale a demora × velocidad
  * de canción.
@@ -1395,18 +1443,19 @@ try {
 function posicionQueSuena(conSalida) {
   if (audio.paused || !gananciaCancion) return audio.currentTime;
   let segundos = (demoraAudio || 0) / 1000;
-  if (conSalida && contextoAudio) segundos += contextoAudio.outputLatency || contextoAudio.baseLatency || 0;
+  if (conSalida) segundos += latenciaSalida();
   return audio.currentTime - segundos * audio.playbackRate;
 }
 
 function mostrarDemora(texto) {
   let normal;
   if (demoraAudio === null) {
-    normal = "Demora del audio: se mide al reproducir a x1";
+    normal = "Demora del audio: se mide sola mientras suena a x1";
   } else {
-    normal = `Demora del audio: ${Math.round(demoraAudio)} ms`;
-    // Si la medición no convenció, se avisa y se muestra el detalle.
-    if (detalleDemora && !detalleDemora.creible) normal += ` ⚠ poco creíble (${detalleDemora.resumen}). Probá “Medir de nuevo” en una parte con banda completa.`;
+    const salida = contextoAudio ? ` + salida ${Math.round(1000 * latenciaSalida())} ms` : "";
+    normal = `Demora del audio: ${Math.round(demoraAudio)} ms${salida}`;
+    if (detalleDemora) normal += ` (${detalleDemora.resumen})`;
+    if (detalleDemora && !detalleDemora.creible) normal += " ⚠ las muestras no coinciden";
   }
   textoDemora.textContent = texto || normal;
   textoDemora.classList.toggle("aviso-demora", !texto && !!detalleDemora && !detalleDemora.creible);
@@ -1426,102 +1475,190 @@ function parecido(captura, cancion, inicio, paso) {
   return producto / Math.sqrt(energiaA * energiaB + 1e-12);
 }
 
+// El mp3 de la canción, mono a 22050 Hz (la misma función que usa el analizador).
+// Se decodifica una vez por canción y queda en memoria.
+function cancionDecodificada(id) {
+  if (!decodificada || decodificada.id !== id) {
+    const promesa = obtenerAudio(id).then(decodificarMp3);
+    decodificada = { id, promesa, datos: null };
+    promesa.then((datos) => { if (decodificada && decodificada.promesa === promesa) decodificada.datos = datos; },
+      () => { if (decodificada && decodificada.promesa === promesa) decodificada = null; });
+  }
+  return decodificada.promesa;
+}
+
+/**
+ * Una muestra de la demora: captura lo que pasa por el contexto y busca el
+ * corrimiento que mejor coincide con el mp3.
+ *   cerca: demora conocida en ms (busca en ±250 ms), o null (busca de -0,3 s a 1,5 s).
+ * Devuelve { ms, parecido } o un motivo si no sirve: "sin coincidencia"
+ * (silencio, aplausos) o "ambigua" (un riff que se repite cada pulso hace
+ * que dos corrimientos coincidan casi igual).
+ */
+function tomarMuestraDemora(cancion, cerca) {
+  const fr = 22050;
+  const bruto = new Float32Array(analizadorDemora.fftSize);
+  analizadorDemora.getFloatTimeDomainData(bruto);
+  const posicion = audio.currentTime;
+  // Pasamos lo capturado (a la frecuencia del contexto) a 22050 Hz.
+  const sr = contextoAudio.sampleRate;
+  const captura = new Float32Array(Math.floor(bruto.length * fr / sr));
+  for (let i = 0; i < captura.length; i++) captura[i] = bruto[Math.floor(i * sr / fr)];
+  // La captura TERMINA en lo que pasa ahora; según audio.currentTime, eso es "posicion".
+  const supuesto = Math.round((posicion - captura.length / fr) * fr);
+
+  // Corrimientos a probar (en muestras): demora d ms = corrimiento -d.
+  const desde = cerca === null ? Math.round(-1.5 * fr) : Math.round((-cerca / 1000 - VENTANA_CERCA) * fr);
+  const hasta = cerca === null ? Math.round(0.3 * fr) : Math.round((-cerca / 1000 + VENTANA_CERCA) * fr);
+  // Búsqueda gruesa (de a 8 muestras), anotando el parecido de cada corrimiento.
+  const lags = [], valores = [];
+  for (let lag = desde; lag <= hasta; lag += 8) {
+    lags.push(lag);
+    valores.push(parecido(captura, cancion, supuesto + lag, 8));
+  }
+  let k = 0;
+  for (let j = 1; j < valores.length; j++) if (valores[j] > valores[k]) k = j;
+  // El segundo mejor, lejos del primero: si es casi igual, la muestra es ambigua.
+  const separacionMinima = Math.round(0.04 * fr);
+  let segundo = -1;
+  for (let j = 0; j < valores.length; j++) {
+    if (Math.abs(lags[j] - lags[k]) > separacionMinima && valores[j] > segundo) segundo = valores[j];
+  }
+  // Ajuste fino alrededor del mejor, muestra por muestra.
+  let mejor = -1, mejorLag = lags[k];
+  for (let lag = lags[k] - 16; lag <= lags[k] + 16; lag++) {
+    const r = parecido(captura, cancion, supuesto + lag, 1);
+    if (r > mejor) { mejor = r; mejorLag = lag; }
+  }
+  if (mejor < 0.8) return { motivo: "sin coincidencia" };
+  if (segundo > 0.95 * valores[k]) return { motivo: "ambigua" };
+  return { ms: Math.max(0, Math.min(1500, -mejorLag / fr * 1000)), parecido: mejor };
+}
+
+// La demora que se usa pasa a ser la mediana de las muestras de este play.
+function usarMuestrasDemora(descartadas = 0) {
+  if (!muestrasDemora.length) return;
+  const orden = muestrasDemora.slice().sort((a, b) => a - b);
+  const mediana = orden[orden.length >> 1];
+  const dispersion = orden[orden.length - 1] - orden[0];
+  const cambio = demoraAudio === null ? Infinity : Math.abs(mediana - demoraAudio);
+  demoraAudio = mediana;
+  detalleDemora = {
+    creible: orden.length < 2 || dispersion <= 30,
+    resumen: `${orden.length === 1 ? "1 muestra" : `${orden.length} muestras`} de este play`
+      + (orden.length >= 2 ? `, dispersión ${Math.round(dispersion)} ms` : "")
+      + (descartadas ? `, ${descartadas} descartadas` : ""),
+  };
+  try {
+    localStorage.setItem("demoraAudio", JSON.stringify({ ms: demoraAudio, medida: Date.now() }));
+  } catch {
+    // queda para esta sesión
+  }
+  if (cambio > 8) reiniciarMetronomo();   // los clics ya programados usaban la demora anterior
+  mostrarDemora();
+}
+
+// ¿Se puede medir ahora? (sonando a x1, con la canción pasando por el contexto)
+const sePuedeMedir = () => !audio.paused && audio.playbackRate === 1 && idActual !== null && !!fuenteCancion;
+
+function prepararAnalizadorDemora() {
+  if (!analizadorDemora) {
+    analizadorDemora = contextoAudio.createAnalyser();
+    analizadorDemora.fftSize = 32768;                // el máximo: ≈0,7 s de audio
+    fuenteCancion.connect(analizadorDemora);
+  }
+}
+
+function programarMuestra(espera) {
+  clearTimeout(temporizadorMuestra);
+  temporizadorMuestra = setTimeout(muestrearDemora, espera);
+}
+
+// Toma una muestra y programa la siguiente (seguidas al principio, después espaciadas).
+async function muestrearDemora() {
+  if (!sePuedeMedir() || midiendoDemora) return;
+  const id = idActual;
+  // La primera vez, el mp3 se decodifica recién con la canción sonando hace un rato.
+  if (!decodificada || decodificada.id !== id || !decodificada.datos) {
+    const sonando = (performance.now() - inicioDelPlay) / 1000;
+    if (sonando < ESPERA_PRIMERA_DECODIFICACION) {
+      programarMuestra((ESPERA_PRIMERA_DECODIFICACION - sonando) * 1000);
+      return;
+    }
+  }
+  let cancion;
+  try {
+    cancion = await cancionDecodificada(id);
+  } catch {
+    return;
+  }
+  if (id !== idActual || !sePuedeMedir() || midiendoDemora) return;
+  prepararAnalizadorDemora();
+  // Cerca de la demora de este play (o de la última conocida). En todo el
+  // rango la primera vez, o si cerca no aparece nada dos veces seguidas
+  // (la demora real puede haber quedado lejos de la conocida).
+  const conocida = muestrasDemora.length ? usarMediana(muestrasDemora) : demoraAudio;
+  const muestra = tomarMuestraDemora(cancion, fallosSeguidos >= 2 ? null : conocida);
+  if (muestra.ms !== undefined) {
+    fallosSeguidos = 0;
+    muestrasDemora.push(muestra.ms);
+    if (muestrasDemora.length > 7) muestrasDemora.shift();   // solo las últimas
+    usarMuestrasDemora();
+  } else {
+    fallosSeguidos++;
+  }
+  programarMuestra(muestrasDemora.length < MUESTRAS_SEGUIDAS ? 1000 : ENTRE_MUESTRAS);
+}
+
+function usarMediana(lista) {
+  const orden = lista.slice().sort((a, b) => a - b);
+  return orden[orden.length >> 1];
+}
+
+// Cada play, salto o cambio de velocidad empieza a medir de nuevo: la demora
+// depende de cómo arrancó la reproducción.
+function reiniciarMuestrasDemora() {
+  muestrasDemora = [];
+  fallosSeguidos = 0;
+  programarMuestra(1200);
+}
+audio.addEventListener("playing", () => {
+  inicioDelPlay = performance.now();
+  reiniciarMuestrasDemora();
+});
+audio.addEventListener("seeked", () => { if (!audio.paused) reiniciarMuestrasDemora(); });
+audio.addEventListener("ratechange", () => { if (!audio.paused) reiniciarMuestrasDemora(); });
+audio.addEventListener("pause", () => clearTimeout(temporizadorMuestra));
+
 let midiendoDemora = false;
 
 /*
- * Mide la demora mientras suena la canción (a x1). Toma hasta 12 muestras del
- * audio que pasa por el contexto, busca en qué parte del mp3 está cada una y
- * se queda con la mediana de los corrimientos.
- *
- * Cuidados (en un Android la medición dio 2 ms, contra 157 en la compu):
- *   - Se busca en un rango amplio (de -1,5 s a +0,3 s): en los celulares la
- *     demora puede ser bastante mayor que en la compu.
- *   - Un riff que se repite cada pulso hace que el audio "de ahora" se parezca
- *     mucho al de medio segundo antes: la comparación puede encontrar una
- *     coincidencia falsa (por ejemplo, cerca de 0 ms). Por eso la captura es
- *     más larga (≈0,7 s) y se descarta cada muestra donde hay un segundo
- *     corrimiento casi tan bueno como el mejor (ambigua).
- *   - Hacen falta al menos 5 muestras claras y que coincidan entre sí.
- *   - Un resultado menor a 20 ms, o con muestras que no coinciden, se guarda
- *     pero se marca como "poco creíble" y se avisa en el panel.
+ * "Medir de nuevo": una medición completa (hasta 10 muestras en todo el
+ * rango, una cada 300 ms). Reemplaza las muestras de este play.
  * Devuelve la demora en ms, o null si no se pudo medir.
  */
 async function medirDemora() {
-  if (midiendoDemora || !fuenteCancion || audio.paused || audio.playbackRate !== 1 || idActual === null) return null;
+  if (midiendoDemora || !sePuedeMedir()) return null;
   midiendoDemora = true;
   mostrarDemora("Demora del audio: midiendo…");
   const id = idActual;
   try {
-    // El mp3 a 22050 Hz y mono (la misma función que usa el analizador).
-    const cancion = await decodificarMp3(await obtenerAudio(id));
-    const fr = 22050;
-    const analizador = contextoAudio.createAnalyser();
-    analizador.fftSize = 32768;                      // el máximo: ≈0,7 s de audio
-    fuenteCancion.connect(analizador);
-    const corrimientos = [];
-    let ambiguas = 0, sinCoincidencia = 0, sumaParecido = 0;
-    const separacionMinima = Math.round(0.04 * fr);  // dos picos a menos de 40 ms son el mismo
-    for (let n = 0; n < 12 && !audio.paused && id === idActual && audio.playbackRate === 1; n++) {
-      await new Promise((r) => setTimeout(r, 400));
-      const bruto = new Float32Array(analizador.fftSize);
-      analizador.getFloatTimeDomainData(bruto);
-      const posicion = audio.currentTime;
-      // Pasamos lo capturado (a la frecuencia del contexto) a 22050 Hz.
-      const sr = contextoAudio.sampleRate;
-      const captura = new Float32Array(Math.floor(bruto.length * fr / sr));
-      for (let i = 0; i < captura.length; i++) captura[i] = bruto[Math.floor(i * sr / fr)];
-      // La captura TERMINA en lo que pasa ahora; según audio.currentTime, eso es "posicion".
-      const supuesto = Math.round((posicion - captura.length / fr) * fr);
-
-      // Búsqueda gruesa (de a 8 muestras), anotando el parecido de cada corrimiento.
-      const lags = [], valores = [];
-      for (let lag = Math.round(-1.5 * fr); lag <= Math.round(0.3 * fr); lag += 8) {
-        lags.push(lag);
-        valores.push(parecido(captura, cancion, supuesto + lag, 8));
-      }
-      let k = 0;
-      for (let j = 1; j < valores.length; j++) if (valores[j] > valores[k]) k = j;
-      // El segundo mejor, lejos del primero: si es casi igual, la muestra es ambigua.
-      let segundo = -1;
-      for (let j = 0; j < valores.length; j++) {
-        if (Math.abs(lags[j] - lags[k]) > separacionMinima && valores[j] > segundo) segundo = valores[j];
-      }
-      // Ajuste fino alrededor del mejor, muestra por muestra.
-      let mejor = -1, mejorLag = lags[k];
-      for (let lag = lags[k] - 16; lag <= lags[k] + 16; lag++) {
-        const r = parecido(captura, cancion, supuesto + lag, 1);
-        if (r > mejor) { mejor = r; mejorLag = lag; }
-      }
-      if (mejor < 0.8) { sinCoincidencia++; continue; }
-      if (segundo > 0.95 * valores[k]) { ambiguas++; continue; }
-      sumaParecido += mejor;
-      corrimientos.push(-mejorLag / fr * 1000);       // ms que el audio va atrasado
+    const cancion = await cancionDecodificada(id);
+    prepararAnalizadorDemora();
+    const medidas = [];
+    let descartadas = 0;
+    for (let n = 0; n < 10 && sePuedeMedir() && id === idActual; n++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const muestra = tomarMuestraDemora(cancion, null);
+      if (muestra.ms !== undefined) medidas.push(muestra.ms); else descartadas++;
     }
-    analizador.disconnect();
-    if (corrimientos.length < 5) {
+    if (medidas.length < 3) {
       mostrarDemora();
       return null;
     }
-    corrimientos.sort((a, b) => a - b);
-    const mediana = corrimientos[corrimientos.length >> 1];
-    // Dispersión: la mitad central de las muestras (rango intercuartil).
-    const dispersion = corrimientos[Math.floor(corrimientos.length * 0.75)] - corrimientos[Math.floor(corrimientos.length * 0.25)];
-    const creible = mediana >= 20 && dispersion <= 30;
-    detalleDemora = {
-      creible,
-      resumen: `${corrimientos.length} de ${corrimientos.length + ambiguas + sinCoincidencia} muestras, dispersión ${Math.round(dispersion)} ms`
-        + `${ambiguas ? `, ${ambiguas} ambiguas` : ""}`
-        + `, salida ${Math.round(1000 * (contextoAudio.outputLatency || 0))} ms`
-        + `, parecido ${(sumaParecido / corrimientos.length).toFixed(2)}`,
-    };
-    demoraAudio = Math.max(0, Math.min(1500, mediana));
-    try {
-      localStorage.setItem("demoraAudio", JSON.stringify({ ms: demoraAudio, medida: Date.now(), detalle: detalleDemora }));
-    } catch {
-      // queda para esta sesión
-    }
-    reiniciarMetronomo();
-    mostrarDemora();
+    muestrasDemora = medidas.slice(-7);
+    usarMuestrasDemora(descartadas);
+    programarMuestra(ENTRE_MUESTRAS);
     return demoraAudio;
   } catch {
     mostrarDemora();
@@ -1530,26 +1667,6 @@ async function medirDemora() {
     midiendoDemora = false;
   }
 }
-
-// La primera vez que suena una canción a x1 en este dispositivo, se mide sola.
-// Cuidados para no molestar al arranque de la canción (en un celular, medir
-// decodifica el mp3 entero y exige al procesador varios segundos):
-//   - empieza recién 8 s después del play, con la canción ya andando;
-//   - se intenta una sola vez por sesión: si no sale, no se reintenta en cada
-//     play (para eso está "Medir de nuevo").
-const ESPERA_MEDICION_AUTOMATICA = 8000;
-let medicionAutomaticaIntentada = false;
-let temporizadorMedicion = null;
-audio.addEventListener("play", () => {
-  if (demoraAudio !== null || medicionAutomaticaIntentada) return;
-  clearTimeout(temporizadorMedicion);
-  temporizadorMedicion = setTimeout(() => {
-    if (demoraAudio !== null || medicionAutomaticaIntentada || audio.paused || audio.playbackRate !== 1) return;
-    medicionAutomaticaIntentada = true;
-    medirDemora();
-  }, ESPERA_MEDICION_AUTOMATICA);
-});
-audio.addEventListener("pause", () => clearTimeout(temporizadorMedicion));
 
 botonMedirDemora.addEventListener("click", async () => {
   if (audio.paused || audio.playbackRate !== 1) {
@@ -1773,31 +1890,17 @@ function mostrarPreferencias() {
    Lista de acordes
    ================================================================== */
 
-// Crea una "ficha" por acorde con su nombre y el minuto en que empieza.
-// data-indice guarda su posición para saber cuál se tocó.
+// La grilla de la vista "Grilla": compases agrupados en vueltas (grilla.js).
+// Necesita los pulsos de la canción; si todavía no están, se dibuja en
+// prepararPulsos.
 function dibujarLista() {
-  lista.innerHTML = "";
-  acordes.forEach((tramo, i) => {
-    const item = document.createElement("li");
-    item.dataset.indice = i;
-    const nombre = document.createElement("b");
-    nombre.textContent = nombreParaMostrar(tramo.acorde);
-    const tiempo = document.createElement("small");
-    tiempo.textContent = formatoTiempo(tramo.inicio);
-    item.append(nombre, tiempo);
-    lista.appendChild(item);
-  });
+  if (!pulsos.length) {
+    lista.replaceChildren();
+    return;
+  }
+  calcularAcordesPorPulso();
+  dibujarGrillaVueltas();
 }
-
-// Un solo "escuchador" para toda la lista: averiguamos qué ficha se tocó
-// y saltamos a ese momento (sumando el ajuste para que coincida).
-lista.addEventListener("click", (evento) => {
-  const item = evento.target.closest("li");
-  if (!item || idActual === null) return;
-  const tramo = acordes[Number(item.dataset.indice)];
-  audio.currentTime = Math.max(0, tramo.inicio + ajuste);
-  actualizar();
-});
 
 /* ==================================================================
    Sincronización: qué acorde corresponde al momento actual
@@ -1850,6 +1953,9 @@ function actualizar() {
   // Tira de pulsos: como "t" ya tiene restado el ajuste, los botones ±0.1 s
   // también corren el pulso resaltado.
   actualizarTira(t);
+  // Grilla por vueltas: el compás que suena (grilla.js), y la parte que suena (partes.js).
+  actualizarGrillaVueltas();
+  actualizarLeyendaParte(t);
 
   // El resto solo cambia cuando cambia el acorde, para no trabajar de más.
   if (indice === indiceActual) return;
@@ -1859,15 +1965,6 @@ function actualizar() {
   acordeSiguiente.textContent = siguiente ? nombreParaMostrar(siguiente.acorde) : "fin";
   mostrarDiagramas();
 
-  // Marcamos las fichas: las anteriores como "pasado" y la actual resaltada.
-  lista.querySelectorAll("li").forEach((item, i) => {
-    item.classList.toggle("pasado", i < indice);
-    item.classList.toggle("actual", i === indice);
-  });
-
-  // Desplazamos la lista para que el acorde actual quede a la vista.
-  const itemActual = lista.children[indice];
-  if (itemActual) itemActual.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 /* ==================================================================
@@ -1955,6 +2052,7 @@ function prepararPulsos(cancion) {
 
   indicePulso = -1;
   dibujarTira();
+  dibujarGrillaVueltas();
 }
 
 // Acorde de cada pulso: el que suena en la mitad del pulso (así no importa
@@ -1986,6 +2084,7 @@ function dibujarTira() {
   });
   tira.scrollLeft = 0;
   marcarSeleccion();   // en modo edición, vuelve a pintar los pulsos elegidos (editor.js)
+  pintarPartesEnTira();   // el color de la parte de cada pulso (partes.js)
 }
 
 // Tocar un casillero salta a ese pulso (sumando el ajuste, para que coincida).
@@ -2029,6 +2128,8 @@ function aplicarVista(nueva) {
   vistaPulsos.hidden = !enPulsos;
   vistaGrilla.hidden = !enGrilla;
   lista.hidden = !enGrilla;
+  barraGrilla.hidden = !enGrilla;
+  barraTabs.hidden = !enTabs;
   vistaTabs.hidden = !enTabs;
   botonVistaPulsos.setAttribute("aria-pressed", String(enPulsos));
   botonVistaGrilla.setAttribute("aria-pressed", String(enGrilla));
@@ -2043,6 +2144,7 @@ function aplicarVista(nueva) {
   indiceActual = -1;
   indicePulso = -1;
   for (const celda of tira.querySelectorAll(".actual")) celda.classList.remove("actual");
+  compasResaltado = -1;   // grilla.js
   actualizar();
 }
 
@@ -2360,6 +2462,47 @@ function cambiarAjuste(delta) {
 // "+": los acordes aparecen después (si los ves antes de que suenen).
 botonAntes.addEventListener("click", () => cambiarAjuste(-0.1));
 botonDespues.addEventListener("click", () => cambiarAjuste(+0.1));
+
+/* ==================================================================
+   Pantalla completa (Fullscreen API)
+
+   En el celular esconde la barra de direcciones de Chrome y la de
+   Android. Se sale con el mismo botón (que cambia de ícono) o con el
+   gesto de "atrás". Si el navegador no lo permite (Safari en iPhone),
+   el botón no aparece.
+   ================================================================== */
+
+const botonPantallaCompleta = document.getElementById("boton-pantalla-completa");
+const hayPantallaCompleta = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+botonPantallaCompleta.hidden = !hayPantallaCompleta;
+
+const elementoEnPantallaCompleta = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+
+botonPantallaCompleta.addEventListener("click", async () => {
+  try {
+    if (elementoEnPantallaCompleta()) {
+      await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
+    } else {
+      const raiz = document.documentElement;
+      await (raiz.requestFullscreen ? raiz.requestFullscreen({ navigationUI: "hide" }) : raiz.webkitRequestFullscreen());
+    }
+  } catch {
+    mostrarMensaje("El navegador no dejó usar la pantalla completa");
+  }
+});
+
+// Al entrar o salir (también con "atrás"), el botón muestra la acción que corresponde.
+function mostrarPantallaCompleta() {
+  const activa = !!elementoEnPantallaCompleta();
+  document.body.classList.toggle("en-pantalla-completa", activa);
+  botonPantallaCompleta.setAttribute("aria-pressed", String(activa));
+  const texto = activa ? "Salir de pantalla completa" : "Pantalla completa";
+  botonPantallaCompleta.setAttribute("aria-label", texto);
+  botonPantallaCompleta.title = texto;
+}
+document.addEventListener("fullscreenchange", mostrarPantallaCompleta);
+document.addEventListener("webkitfullscreenchange", mostrarPantallaCompleta);
+mostrarPantallaCompleta();
 
 /* ==================================================================
    Pantalla encendida mientras suena

@@ -92,6 +92,18 @@ panelTabs.addEventListener("click", (evento) => {
   if (evento.target === panelTabs) panelTabs.close();   // tocar afuera también lo cierra
 });
 
+// Cuánto lugar se deja arriba del renglón que suena al desplazar la
+// tablatura. En el celular acostado, poco: así entran dos sistemas enteros.
+const enHorizontal = window.matchMedia("(orientation: landscape) and (max-height: 500px)");
+const margenCursor = () => (enHorizontal.matches ? -6 : -40);
+enHorizontal.addEventListener("change", () => {
+  if (!apiTabs) return;
+  apiTabs.settings.player.scrollOffsetY = margenCursor();
+  apiTabs.updateSettings();
+  // Cambió el ancho disponible: alphaTab vuelve a armar los renglones.
+  apiTabs.render();
+});
+
 // Estado de la vista
 let apiTabs = null;            // la instancia de alphaTab (se crea una sola vez)
 let tabsDeCancion = null;      // id de la canción cuya tablatura está cargada
@@ -254,7 +266,7 @@ function crearApiTabs() {
       enableUserInteraction: true,                            // tocar una nota salta a ese lugar del mp3
       scrollMode: alphaTab.ScrollMode.Continuous,
       scrollElement: cajaTabs,
-      scrollOffsetY: -40,
+      scrollOffsetY: margenCursor(),
     },
   });
 

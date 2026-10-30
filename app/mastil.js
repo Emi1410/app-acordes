@@ -34,6 +34,7 @@ const COLUMNA_AIRE = 22;       // notas al aire (fija, a la izquierda de la ceju
 const ENTRE_CUERDAS = 15;
 const ARRIBA_MASTIL = 9;
 const ALTO_NUMEROS = 15;
+const RADIO_NOTA = 7.6;        // un poco más que la mitad de ENTRE_CUERDAS: tapa la cuerda alrededor de la letra
 
 // Preferencias (en este dispositivo)
 let modoMastil = "auto";        // "auto" | "1" | "2" | "ambas"
@@ -57,6 +58,7 @@ let trastesVisibles = 7;
 let primerTrasteVisible = 0;      // el tramo muestra los trastes primerTrasteVisible+1 ... +trastesVisibles
 let claveDibujada = "";
 let grupoMovil = null;            // la parte del mástil que se corre
+let grupoNotasMovil = null;       // las notas pisadas: se corren igual, pero van encima de las cuerdas
 let capaNotasMovil = null;
 let capaNotasAire = null;
 
@@ -169,7 +171,6 @@ function dibujarMastil() {
   crearSvgMastil("rect", { x: xCejuela, y: 0, width: zonaTrastes, height: alto }, recorte);
   const zona = crearSvgMastil("g", { "clip-path": "url(#recorte-mastil)" }, svg);
   grupoMovil = crearSvgMastil("g", { class: "mastil-movil" }, zona);
-  grupoMovil.style.transform = `translateX(${xCejuela - primerTrasteVisible * anchoTraste}px)`;
 
   // Madera, marcas, trastes y números (para los 24 trastes; se ve solo un tramo)
   crearSvgMastil("rect", { x: 0, y: ARRIBA_MASTIL - 4, width: TRASTES_TOTALES * anchoTraste, height: altoCuerdas + 8, class: "mastil-madera" }, grupoMovil);
@@ -199,7 +200,11 @@ function dibujarMastil() {
   const cero = crearSvgMastil("text", { x: MARGEN_IZQUIERDO + COLUMNA_AIRE / 2, y: alto - 4, class: "mastil-numero" }, svg);
   cero.textContent = "0";
 
-  capaNotasMovil = crearSvgMastil("g", {}, grupoMovil);
+  // Las notas van en una capa aparte, dibujada DESPUÉS de las cuerdas: así
+  // el punto queda encima de la cuerda y la línea no cruza la letra.
+  const zonaNotas = crearSvgMastil("g", { "clip-path": "url(#recorte-mastil)" }, svg);
+  grupoNotasMovil = crearSvgMastil("g", { class: "mastil-movil" }, zonaNotas);
+  capaNotasMovil = grupoNotasMovil;
   capaNotasAire = crearSvgMastil("g", {}, svg);
   contenedorMastil.appendChild(svg);
   moverTramo(Math.min(primerTrasteVisible, TRASTES_TOTALES - trastesVisibles));
@@ -210,7 +215,9 @@ function dibujarMastil() {
 // (con transición suave, ver .mastil-movil en style.css).
 function moverTramo(nuevo) {
   primerTrasteVisible = nuevo;
-  grupoMovil.style.transform = `translateX(${MARGEN_IZQUIERDO + COLUMNA_AIRE - primerTrasteVisible * anchoTraste}px)`;
+  const corrimiento = `translateX(${MARGEN_IZQUIERDO + COLUMNA_AIRE - primerTrasteVisible * anchoTraste}px)`;
+  grupoMovil.style.transform = corrimiento;
+  grupoNotasMovil.style.transform = corrimiento;
   contenedorMastil.dataset.tramo = `${primerTrasteVisible + 1}-${primerTrasteVisible + trastesVisibles}`;
 }
 
@@ -267,7 +274,8 @@ function actualizarMastil() {
       const capa = alAire ? capaNotasAire : capaNotasMovil;
       const x = alAire ? MARGEN_IZQUIERDO + COLUMNA_AIRE / 2 : (nota.traste - 0.5) * anchoTraste;
       const y = ARRIBA_MASTIL + nota.fila * ENTRE_CUERDAS;
-      crearSvgMastil("circle", { cx: x, cy: y, r: 7.2, class: `mastil-nota mastil-nota-${numero}` }, capa);
+      // Punto con borde oscuro (se separa de la cuerda) y la letra encima, en negrita.
+      crearSvgMastil("circle", { cx: x, cy: y, r: RADIO_NOTA, class: `mastil-nota mastil-nota-${numero}` }, capa);
       const texto = crearSvgMastil("text", { x, y, class: "mastil-nota-texto" }, capa);
       texto.textContent = etiquetaMastil === "traste" ? String(nota.traste) : nombres[nota.altura % 12];
     }

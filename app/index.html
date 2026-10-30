@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=2.8">
+  <link rel="stylesheet" href="style.css?v=2.9">
 </head>
 <body>
 
@@ -119,6 +119,12 @@
         <small id="posicion-lista" class="posicion-lista"></small>
       </div>
       <button id="boton-agregar-lista" class="boton boton-chico" type="button">+ Lista</button>
+      <!-- Pantalla completa (esconde la barra de Chrome en el celular). Tocar de nuevo, o "atrás", la deja. -->
+      <button id="boton-pantalla-completa" class="boton boton-chico boton-pantalla-completa" type="button"
+              aria-label="Pantalla completa" title="Pantalla completa" hidden>
+        <svg class="icono-agrandar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg class="icono-achicar" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
     </header>
 
     <!-- Selector de vista: tira de pulsos o grilla de acordes (se recuerda la elección).
@@ -128,6 +134,18 @@
         <button id="boton-vista-pulsos" type="button" aria-pressed="true">Pulsos</button>
         <button id="boton-vista-grilla" type="button" aria-pressed="false">Grilla</button>
         <button id="boton-vista-tabs" type="button" aria-pressed="false">Tabs</button>
+      </div>
+      <!-- Solo en la vista Tabs: corregir el compás 1 rápido, zoom y el panel con
+           pistas y sincronización (en horizontal queda en la misma barra que el selector) -->
+      <div id="barra-tabs" class="barra-tabs" hidden>
+        <button id="inicio-ahora" class="boton boton-chico" type="button"
+                title="El compás 1 empieza en lo que suena ahora">Ahora</button>
+        <div class="zoom-tabs" role="group" aria-label="Tamaño de la tablatura">
+          <button id="zoom-menos" class="boton boton-chico" type="button" aria-label="Achicar la tablatura">−</button>
+          <output id="valor-zoom">70 %</output>
+          <button id="zoom-mas" class="boton boton-chico" type="button" aria-label="Agrandar la tablatura">+</button>
+        </div>
+        <button id="boton-panel-tabs" class="boton boton-chico" type="button">Pistas y sync</button>
       </div>
     </div>
 
@@ -140,6 +158,9 @@
       <p id="aviso-pulsos" class="aviso-pulsos" hidden>
         Pulsos aproximados según el tempo. Tocá ↻ para calcular los compases exactos.
       </p>
+
+      <!-- La parte de la canción que suena ("Primera estrofa"), con su color. Tocarla abre las partes. -->
+      <button id="leyenda-parte" class="leyenda-parte" type="button" hidden></button>
 
       <!-- Un casillero por pulso; se desplaza sola. Tocar un casillero salta a ese pulso. -->
       <div id="tira" class="tira"></div>
@@ -166,18 +187,6 @@
       <!-- Avisos: sin tablatura, cargando, errores -->
       <p id="aviso-tabs" class="aviso-pulsos" hidden></p>
 
-      <!-- Barra chica: corregir el compás 1 rápido, zoom y el panel con pistas y sincronización -->
-      <div class="barra-tabs">
-        <button id="inicio-ahora" class="boton boton-chico" type="button"
-                title="El compás 1 empieza en lo que suena ahora">Ahora</button>
-        <div class="zoom-tabs" role="group" aria-label="Tamaño de la tablatura">
-          <button id="zoom-menos" class="boton boton-chico" type="button" aria-label="Achicar la tablatura">−</button>
-          <output id="valor-zoom">70 %</output>
-          <button id="zoom-mas" class="boton boton-chico" type="button" aria-label="Agrandar la tablatura">+</button>
-        </div>
-        <button id="boton-panel-tabs" class="boton boton-chico" type="button">Pistas y sync</button>
-      </div>
-
       <!-- Acá alphaTab dibuja las tablaturas; se desplaza sola siguiendo lo que suena -->
       <div id="caja-tabs" class="caja-tabs"><div id="tabs"></div></div>
 
@@ -194,6 +203,8 @@
         <button id="editar-sin" class="boton boton-chico" type="button">Sin acorde</button>
         <button id="editar-copiar" class="boton boton-chico" type="button">Copiar</button>
         <button id="editar-pegar" class="boton boton-chico" type="button">Pegar</button>
+        <!-- Marca que en el pulso elegido empieza una parte (o la renombra) -->
+        <button id="editar-parte" class="boton boton-chico" type="button">Parte</button>
       </div>
       <!-- Velocidad, para escuchar más lento mientras se corrige (la misma del panel "Más") -->
       <div class="paso paso-edicion">
@@ -267,8 +278,18 @@
       </div>
     </div>
 
-    <!-- Lista de todos los acordes -->
-    <ul id="lista" class="lista"></ul>
+    <!-- Vista Grilla: largo de la vuelta y partes de la canción -->
+    <div id="barra-grilla" class="barra-grilla" hidden>
+      <span>Vuelta</span>
+      <button id="vuelta-menos" class="boton boton-chico" type="button" aria-label="Vuelta más corta">−</button>
+      <output id="valor-vuelta">4 compases</output>
+      <button id="vuelta-mas" class="boton boton-chico" type="button" aria-label="Vuelta más larga">+</button>
+      <button id="vuelta-auto" class="boton boton-chico" type="button" aria-pressed="true">Auto</button>
+      <button id="boton-partes-grilla" class="boton boton-chico boton-partes" type="button">Partes</button>
+    </div>
+
+    <!-- Grilla por vueltas: un casillero por compás, un renglón por vuelta (grilla.js) -->
+    <div id="lista" class="grilla-vueltas"></div>
   </section>
 
   <!-- ==============================================================
@@ -308,6 +329,8 @@
           <option value="analisis">Acordes del audio</option>
           <option value="tablatura">Acordes de la tablatura</option>
         </select>
+        <!-- Intro, estrofas, estribillo...: detectarlas, pegarlas de un cifrado o renombrarlas -->
+        <button id="boton-partes" class="boton boton-chico" type="button">Partes de la canción</button>
         <!-- Solo aparece si la canción fue editada -->
         <button id="boton-restaurar" class="boton boton-chico" type="button" hidden>Restaurar análisis original</button>
       </div>
@@ -493,6 +516,62 @@
     </form>
   </dialog>
 
+  <!-- Partes de la canción: lista para renombrar, detectar solas o ubicar un cifrado -->
+  <dialog id="dialogo-partes" class="dialogo hoja" aria-label="Partes de la canción">
+    <div class="hoja-contenido">
+      <h2>Partes de la canción</h2>
+      <p id="sin-partes" class="ayuda">Todavía no hay partes. Detectalas solas, pegá un cifrado o marcalas en el editor (“Parte”).</p>
+      <ol id="lista-partes" class="lista-partes"></ol>
+      <div class="acciones-partes">
+        <button id="detectar-partes" class="boton boton-chico" type="button">Detectar solas</button>
+        <button id="mostrar-cifrado" class="boton boton-chico" type="button">Desde un cifrado</button>
+      </div>
+      <div id="caja-cifrado" class="caja-cifrado" hidden>
+        <textarea id="texto-cifrado" rows="7" spellcheck="false"
+                  placeholder="[Intro]&#10;Am  C  G&#10;[Verse]&#10;Am  F  E&#10;[Chorus]&#10;Am  C  G"></textarea>
+        <button id="ubicar-cifrado" class="boton boton-chico boton-principal" type="button">Ubicar en la canción</button>
+        <p id="resultado-cifrado" class="ayuda"></p>
+      </div>
+      <button id="cerrar-partes" class="boton boton-principal" type="button">Listo</button>
+    </div>
+  </dialog>
+
+  <!-- Editor: la parte que empieza en el pulso elegido -->
+  <dialog id="dialogo-parte" class="dialogo">
+    <form method="dialog">
+      <h2 id="titulo-dialogo-parte">Nueva parte</h2>
+      <label class="campo">
+        Tipo
+        <select id="tipo-parte"></select>
+      </label>
+      <label class="campo">
+        Nombre
+        <input type="text" id="nombre-parte" maxlength="40" autocomplete="off">
+      </label>
+      <div class="dialogo-botones">
+        <button id="quitar-parte" class="boton" type="submit" value="quitar">Quitar</button>
+        <button class="boton" type="submit" value="cancelar">Cancelar</button>
+        <button class="boton boton-principal" type="submit" value="guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- "Acordes desde la tablatura": qué pista es la guitarra de acompañamiento -->
+  <dialog id="dialogo-acordes-tab" class="dialogo">
+    <form method="dialog">
+      <h2>Acordes desde la tablatura</h2>
+      <label class="campo">
+        Guitarra de acompañamiento
+        <select id="pista-acompanamiento"></select>
+      </label>
+      <p class="ayuda">Los acordes salen de lo que toca esta pista; el bajo da la raíz y las demás ayudan con la tercera.</p>
+      <div class="dialogo-botones">
+        <button class="boton" type="submit" value="cancelar">Cancelar</button>
+        <button class="boton boton-principal" type="submit" value="calcular">Calcular</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Sugerencias con los nombres de las listas existentes (las usan los dos campos de lista) -->
   <datalist id="sugerencias-listas"></datalist>
 
@@ -502,18 +581,21 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=2.8"></script>
-  <script src="acordes.js?v=2.8"></script>
-  <script src="diagrama.js?v=2.8"></script>
-  <script src="biblioteca.js?v=2.8"></script>
-  <script src="analizador.js?v=2.8"></script>
-  <script src="app.js?v=2.8"></script>
-  <script src="editor.js?v=2.8"></script>
+  <script src="acordes-extra.js?v=2.9"></script>
+  <script src="acordes.js?v=2.9"></script>
+  <script src="diagrama.js?v=2.9"></script>
+  <script src="biblioteca.js?v=2.9"></script>
+  <script src="analizador.js?v=2.9"></script>
+  <script src="app.js?v=2.9"></script>
+  <script src="editor.js?v=2.9"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=2.8"></script>
-  <script src="mastil.js?v=2.8"></script>
-  <script src="sincronizar-solo.js?v=2.8"></script>
+  <script src="tablaturas.js?v=2.9"></script>
+  <script src="mastil.js?v=2.9"></script>
+  <script src="sincronizar-solo.js?v=2.9"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=2.8"></script>
+  <script src="acordes-tablatura.js?v=2.9"></script>
+  <!-- Grilla por vueltas y partes de la canción -->
+  <script src="grilla.js?v=2.9"></script>
+  <script src="partes.js?v=2.9"></script>
 </body>
 </html>

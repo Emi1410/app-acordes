@@ -496,6 +496,8 @@ botonExportar.addEventListener("click", async () => {
     // Preferencias de esta canción
     ajuste: c.ajuste, velocidad: c.velocidad,
     transporte: c.transporte, cejilla: c.cejilla, afinacion: c.afinacion,
+    // Partes de la canción (Intro, Estrofa, Estribillo...)
+    partes: Array.isArray(c.partes) && c.partes.length ? c.partes : undefined,
   };
   const archivo = new Blob([JSON.stringify(datos, null, 2)], { type: "application/json" });
   const enlace = document.createElement("a");

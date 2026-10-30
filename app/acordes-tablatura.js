@@ -137,13 +137,16 @@ function eventosDePista(pista) {
  * Acompañamiento: entre las que no son batería ni bajo, la que más pulsos
  * tiene con varias notas juntas. El nombre ayuda: "Rhythm"/"Ritmo" suma,
  * "Lead"/"Solo"/"Vocals" resta.
+ *   elegida: índice de la pista de acompañamiento si la eligió la usuaria
+ *            (null = automática).
  */
-function repartirPistas(partitura) {
+function repartirPistas(partitura, elegida = null) {
   const conNotas = partitura.tracks
     .filter((p) => !p.staves[0].isPercussion)
     .map((p) => ({ pista: p, eventos: eventosDePista(p) }))
     .filter((x) => x.eventos.length);
-  const bajos = conNotas.filter((x) => esPistaDeBajo(x.pista)).sort((a, b) => b.eventos.length - a.eventos.length);
+  const preferida = conNotas.find((x) => x.pista.index === elegida) || null;
+  const bajos = conNotas.filter((x) => esPistaDeBajo(x.pista) && x !== preferida).sort((a, b) => b.eventos.length - a.eventos.length);
   const bajo = bajos[0] || null;
   const resto = conNotas.filter((x) => x !== bajo);
   const puntaje = (x) => {
@@ -153,6 +156,7 @@ function repartirPistas(partitura) {
     return p;
   };
   resto.sort((a, b) => puntaje(b) - puntaje(a));
+  if (preferida) return { acompanamiento: preferida, bajo, otras: resto.filter((x) => x !== preferida) };
   return { acompanamiento: resto[0] || bajo, bajo, otras: resto.slice(1) };
 }
 
@@ -388,6 +392,7 @@ function terceraSegunTonalidad(raiz, tonalidad) {
 
 /**
  * Calcula los acordes de una partitura de alphaTab.
+ *   opciones.acompanamiento: índice de la pista de acompañamiento (o null: la elige sola).
  * Devuelve {
  *   tramos:   [{ desde, hasta (índices de pulso, hasta excluido), acorde }],
  *   pulsos:   [{ inicio, fin }] en ticks,
@@ -396,8 +401,8 @@ function terceraSegunTonalidad(raiz, tonalidad) {
  *   pistas:   nombres de las pistas usadas,
  * }
  */
-function acordesDePartitura(partitura) {
-  const pistas = repartirPistas(partitura);
+function acordesDePartitura(partitura, opciones = {}) {
+  const pistas = repartirPistas(partitura, opciones.acompanamiento ?? null);
   if (!pistas.acompanamiento) throw new Error("La tablatura no tiene pistas con notas.");
   const { pulsos, primeros } = pulsosDePartitura(partitura);
 
@@ -566,6 +571,7 @@ function acordesDePartitura(partitura) {
     primeros,
     tonalidad,
     pistas: {
+      indiceAcompanamiento: pistas.acompanamiento.pista.index,
       acompanamiento: pistas.acompanamiento.pista.name,
       bajo: pistas.bajo ? pistas.bajo.pista.name : null,
       otras: pistas.otras.map((o) => o.pista.name),
@@ -730,6 +736,31 @@ async function reubicarAcordesTablatura(id, partitura, tiempos, syncNuevo) {
    ================================================================== */
 
 const botonAcordesTab = document.getElementById("boton-acordes-tab");
+const dialogoAcordesTab = document.getElementById("dialogo-acordes-tab");
+const selectorPistaAcompanamiento = document.getElementById("pista-acompanamiento");
+
+/**
+ * Pregunta qué pista usar como acompañamiento (por si la automática elige
+ * mal). Arranca en la elección guardada para la canción, o en "Automática"
+ * (con el nombre de la que elegiría). Devuelve el índice (null =
+ * automática) o undefined si se canceló.
+ */
+function elegirPistaAcompanamiento(partitura, guardada) {
+  const automatica = repartirPistas(partitura).acompanamiento;
+  const conNotas = partitura.tracks.filter((p) => !p.staves[0].isPercussion && eventosDePista(p).length);
+  selectorPistaAcompanamiento.replaceChildren(
+    new Option(`Automática (${automatica ? automatica.pista.name : "—"})`, ""),
+    ...conNotas.map((p) => new Option(`${p.index + 1}. ${p.name}`, String(p.index))));
+  selectorPistaAcompanamiento.value = Number.isInteger(guardada) && conNotas.some((p) => p.index === guardada) ? String(guardada) : "";
+  return new Promise((resolver) => {
+    dialogoAcordesTab.returnValue = "";
+    dialogoAcordesTab.addEventListener("close", () => {
+      if (dialogoAcordesTab.returnValue !== "calcular") { resolver(undefined); return; }
+      resolver(selectorPistaAcompanamiento.value === "" ? null : Number(selectorPistaAcompanamiento.value));
+    }, { once: true });
+    dialogoAcordesTab.showModal();
+  });
+}
 const selectorFuente = document.getElementById("selector-fuente");
 
 // La partitura de una canción: la de la vista Tabs si ya está cargada, o se
@@ -745,16 +776,18 @@ async function partituraDeCancion(id) {
 
 // Muestra el botón (si hay tablatura) y el selector (si hay los dos juegos).
 async function mostrarFuenteAcordes() {
-  const id = idActual;
-  const tieneTab = id !== null && !!(await obtenerTablatura(id).catch(() => null));
-  if (id !== idActual) return;
-  botonAcordesTab.hidden = !tieneTab;
+  // El selector depende solo de la canción: se muestra enseguida.
   const tiene = (fuente) => {
     const juego = juegoDe(cancionActual, fuente);
     return !!(juego && Array.isArray(juego.acordes) && juego.acordes.length);
   };
   selectorFuente.hidden = !(tiene("analisis") && tiene("tablatura"));
   selectorFuente.value = fuenteDe(cancionActual);
+  // El botón, cuando se sepa si hay tablatura (mientras tanto, oculto).
+  const id = idActual;
+  botonAcordesTab.hidden = true;
+  const tieneTab = id !== null && !!(await obtenerTablatura(id).catch(() => null));
+  if (id === idActual) botonAcordesTab.hidden = !tieneTab;
 }
 
 botonAcordesTab.addEventListener("click", async () => {
@@ -784,6 +817,17 @@ botonAcordesTab.addEventListener("click", async () => {
     if (!partitura) throw new Error("La canción no tiene tablatura.");
     const tiempos = calcularTiemposPartitura(partitura);
 
+    // Qué pista es el acompañamiento (se recuerda por canción).
+    capaProgreso.hidden = true;
+    const elegida = await elegirPistaAcompanamiento(partitura, cancion.pistaAcompanamiento);
+    if (elegida === undefined) return;
+    capaProgreso.hidden = false;
+    if (elegida !== (cancion.pistaAcompanamiento ?? null)) {
+      await actualizarCancion(id, { pistaAcompanamiento: elegida });
+      cancion = { ...cancion, pistaAcompanamiento: elegida };
+      if (id === idActual) cancionActual = { ...cancionActual, pistaAcompanamiento: elegida };
+    }
+
     // Sin sincronización guardada no se sabe en qué segundo del mp3 cae cada
     // compás: se ofrece sincronizar sola (lo mismo que "Sincronizar solo" en Tabs).
     let sync = cancion.tabSync;
@@ -806,7 +850,7 @@ botonAcordesTab.addEventListener("click", async () => {
 
     progreso(0.9, "Armando los acordes");
     await new Promise((r) => setTimeout(r, 0));   // deja dibujar la barra
-    const resultado = acordesDePartitura(partitura);
+    const resultado = acordesDePartitura(partitura, { acompanamiento: elegida });
     const delAudio = juegoDe(cancion, "analisis") || {};
     const finAnalisis = Array.isArray(delAudio.acordes) && delAudio.acordes.length ? delAudio.acordes[delAudio.acordes.length - 1].fin : 0;
     const duracion = id === idActual && isFinite(audio.duration) ? audio.duration : finAnalisis;
