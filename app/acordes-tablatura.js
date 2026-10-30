@@ -7,7 +7,11 @@
    de Guitar Pro y se arma el acorde de cada pulso:
      1. Pistas: la guitarra de acompañamiento (la que más toca notas juntas,
         o la que se llama "Rhythm"), el bajo y las demás (guitarra líder,
-        voz, teclados...), que solo ayudan.
+        voz, teclados...), que solo ayudan. Cuando la guitarra de
+        acompañamiento calla (una intro de piano) o solo toca notas sueltas,
+        el acorde sale de las pistas "armónicas": teclados y otras guitarras
+        que tocan notas juntas, con el bajo o la mano izquierda del piano
+        para la raíz. La voz y los vientos no cuentan.
      2. Para cada pulso del compás se suma cuánto suena cada una de las 12
         notas. Las notas que se tocan juntas (un acorde rasgueado) pesan más
         que las sueltas de un riff o una melodía.
@@ -132,8 +136,25 @@ function eventosDePista(pista) {
   return eventos.sort((a, b) => a.inicio - b.inicio);
 }
 
+// La voz y los vientos cantan melodías: nunca definen el acorde.
+function esVozOViento(pista) {
+  const programa = pista.playbackInfo ? pista.playbackInfo.program : -1;
+  return /voc|voz|vox|sing|canto/i.test(pista.name) || (programa >= 56 && programa <= 79);
+}
+
+// Altura promedio de las notas de una pista (para saber cuál es la más grave).
+function alturaPromedio(eventos) {
+  let suma = 0, cantidad = 0;
+  for (const e of eventos) for (const a of e.alturas) { suma += a; cantidad++; }
+  return cantidad ? suma / cantidad : Infinity;
+}
+
 /**
- * Reparte las pistas: { acompanamiento, bajo, otras } (con sus eventos).
+ * Reparte las pistas: { acompanamiento, bajo, otras, armonicas, grave } (con sus eventos).
+ *   armonicas: las otras pistas que pueden dar acordes (teclados, guitarras;
+ *              no la voz ni los vientos), para cuando el acompañamiento calla.
+ *   grave:     entre ellas, la más grave (la mano izquierda del piano), que
+ *              da la raíz cuando no toca el bajo.
  * Acompañamiento: entre las que no son batería ni bajo, la que más pulsos
  * tiene con varias notas juntas. El nombre ayuda: "Rhythm"/"Ritmo" suma,
  * "Lead"/"Solo"/"Vocals" resta.
@@ -156,8 +177,19 @@ function repartirPistas(partitura, elegida = null) {
     return p;
   };
   resto.sort((a, b) => puntaje(b) - puntaje(a));
-  if (preferida) return { acompanamiento: preferida, bajo, otras: resto.filter((x) => x !== preferida) };
-  return { acompanamiento: resto[0] || bajo, bajo, otras: resto.slice(1) };
+  const acompanamiento = preferida || resto[0] || bajo;
+  const otras = resto.filter((x) => x !== acompanamiento);
+  const armonicas = otras.filter((x) => !esVozOViento(x.pista));
+  // La pista grave (la mano izquierda del piano): un teclado, o una pista que
+  // se llama "Lower", "Left" o "Izquierda", que toca en el registro grave
+  // (debajo de C4). Una guitarra con melodía nunca da la raíz.
+  const esTeclado = (p) => {
+    const programa = p.playbackInfo ? p.playbackInfo.program : -1;
+    return (programa >= 0 && programa <= 23) || /piano|key|organ|[oó]rgano|synth|teclado|lower|left|izq/i.test(p.name);
+  };
+  const grave = armonicas.filter((x) => esTeclado(x.pista) && alturaPromedio(x.eventos) < 60)
+    .sort((a, b) => alturaPromedio(a.eventos) - alturaPromedio(b.eventos))[0] || null;
+  return { acompanamiento, bajo, otras, armonicas, grave };
 }
 
 /* ------------------------------------------------------------------
@@ -236,7 +268,48 @@ function perfilEntre(pistas, desde, hasta, largoPulso, pesoSegunda = PESO_SEGUND
   const juntas = notasJuntas(acompanamiento, desde, hasta, largoPulso, pesoSegunda);
   if (hayBajo) sumarEventos(tramo(pistas.bajo.eventos), desde, hasta, largoPulso, PESO_BAJO, otras, graves, pesoSegunda);
   for (const otra of pistas.otras) sumarEventos(tramo(otra.eventos), desde, hasta, largoPulso, PESO_OTRAS, otras, null, pesoSegunda);
-  return { guitarra, juntas, graves, otras };
+
+  // Armonía de respaldo (para cuando el acompañamiento calla o solo toca
+  // notas sueltas): las pistas armónicas, sus notas juntas, y la raíz del
+  // bajo o, si el bajo no toca, de la pista más grave.
+  const armonia = new Array(12).fill(0);
+  const eventosArmonicos = [];
+  const sonando = [];
+  for (const x of pistas.armonicas) {
+    const eventos = tramo(x.eventos);
+    const antes = armonia.reduce((s, v) => s + v, 0);
+    sumarEventos(eventos, desde, hasta, largoPulso, 1, armonia, null, pesoSegunda);
+    if (armonia.reduce((s, v) => s + v, 0) > antes) sonando.push(x.pista.name);
+    eventosArmonicos.push(...eventos.filter((e) => e.inicio < hasta && e.fin > desde));
+  }
+  eventosArmonicos.sort((a, b) => a.inicio - b.inicio);
+  const juntasArmonia = notasJuntas(eventosArmonicos, desde, hasta, largoPulso, pesoSegunda);
+  let gravesArmonia = graves;
+  if (graves.every((v) => v === 0) && pistas.grave) {
+    gravesArmonia = new Array(12).fill(0);
+    sumarEventos(tramo(pistas.grave.eventos), desde, hasta, largoPulso, 1, null, gravesArmonia, pesoSegunda);
+  }
+  return { guitarra, juntas, graves, otras, armonia, juntasArmonia, gravesArmonia, armonicasSonando: sonando };
+}
+
+/**
+ * Lo que se mira para elegir el acorde, según de dónde sale:
+ *   "guitarra": la guitarra de acompañamiento, con el bajo para la raíz;
+ *   "armonia":  las pistas armónicas, con el bajo o la pista grave para la raíz.
+ * Devuelve { guitarra, juntas, graves } (los nombres de siempre, para usar
+ * las mismas funciones con cualquiera de las dos).
+ */
+function vistaDe(perfil, fuente) {
+  if (fuente === "armonia") return { guitarra: perfil.armonia, juntas: perfil.juntasArmonia, graves: perfil.gravesArmonia };
+  return perfil;
+}
+
+// ¿Las pistas armónicas alcanzan para definir un acorde? Tienen que tocar
+// notas juntas, o una raíz en el grave con algo arriba: una melodía de notas
+// sueltas sola no alcanza (solo confirma).
+function armoniaAlcanza(perfil) {
+  const vista = vistaDe(perfil, "armonia");
+  return vista.juntas.total > 0 || notaDelBajo(vista.graves) >= 0;
 }
 
 /**
@@ -318,23 +391,41 @@ function proporciones(perfil) {
  * nota del bajo como ayuda para la raíz. Devuelve { raiz, tipo, explica,
  * puntaje } o null si no alcanza para decir nada (una sola nota suelta).
  *   soloRaiz: si se indica, solo se prueban acordes con esa raíz.
+ *   opciones.basicos: solo tríadas y power chords (para las pistas
+ *     armónicas: el piano mueve voces y una nota de paso de la mano
+ *     derecha no tiene que volver Em un Em7).
+ *   opciones.raizSiNada: si ningún acorde cierra pero el grave toca una
+ *     raíz que además es la nota que más suena, el power chord de esa raíz
+ *     (una melodía sobre la raíz).
  */
-function elegirAcordeDeNotas(perfil, soloRaiz = null) {
+function elegirAcordeDeNotas(perfil, soloRaiz = null, opciones = {}) {
   const parte = proporciones(perfil.guitarra);
   if (parte.every((v) => v === 0)) return null;
   const juntas = perfil.juntas;
   const notaBajo = notaDelBajo(perfil.graves);
   const suenan = new Set(parte.map((v, i) => (v >= UMBRAL_NOTA_ESENCIAL ? i : -1)).filter((i) => i >= 0));
   if (notaBajo >= 0) suenan.add(notaBajo);
+  // Pistas armónicas: si todos tocan la misma nota y es la del grave (un
+  // unísono sobre la raíz), es el power chord de esa raíz; la tercera se
+  // decide después como en cualquier power chord. (En la guitarra de
+  // acompañamiento no: ahí un unísono suele ser un riff que pasa.)
+  if (opciones.raizSiNada && suenan.size === 1 && notaBajo >= 0 && (soloRaiz === null || soloRaiz === notaBajo)) {
+    return { raiz: notaBajo, tipo: "5", explica: 1, puntaje: 1 + PREMIO_BAJO };
+  }
   if (suenan.size < 2) return null;
 
   let mejor = null;
   for (let raiz = 0; raiz < 12; raiz++) {
     if (soloRaiz !== null && raiz !== soloRaiz) continue;
     for (const tipo of Object.keys(FORMULAS_ACORDE)) {
+      if (opciones.basicos && !["", "m", "5"].includes(tipo)) continue;
       const r = puntuarAcorde(parte, juntas, notaBajo, raiz, tipo);
       if (r && (!mejor || r.puntaje > mejor.puntaje)) mejor = r;
     }
+  }
+  if (!mejor && opciones.raizSiNada && notaBajo >= 0 && parte[notaBajo] === Math.max(...parte)
+      && (soloRaiz === null || soloRaiz === notaBajo)) {
+    return { raiz: notaBajo, tipo: "5", explica: parte[notaBajo], puntaje: parte[notaBajo] + PREMIO_BAJO };
   }
   return mejor;
 }
@@ -420,24 +511,49 @@ function acordesDePartitura(partitura, opciones = {}) {
     const hasta = b + 1 < primeros.length ? primeros[b + 1] : pulsos.length;
     for (let i = desde; i < hasta; i += 2) grupos.push({ desde: i, hasta: Math.min(i + 2, hasta) });
   });
+  // ¿La guitarra de acompañamiento no toca nada en todo el compás del grupo?
+  const callaElCompas = (g) => {
+    let b = 0;
+    while (b + 1 < primeros.length && primeros[b + 1] <= g.desde) b++;
+    const hasta = b + 1 < primeros.length ? primeros[b + 1] : pulsos.length;
+    return perfiles.slice(primeros[b], hasta).every((p) => p.guitarra.every((v) => v === 0));
+  };
   const porPulso = new Array(pulsos.length).fill(null);
+  const fuentePorPulso = new Array(pulsos.length).fill(null);   // de qué pistas salió cada acorde
   let anterior = null;
   for (const g of grupos) {
     const largoPulso = pulsos[g.desde].fin - pulsos[g.desde].inicio;
     const perfil = perfilEntre(pistas, pulsos[g.desde].inicio, pulsos[g.hasta - 1].fin, largoPulso);
-    let acorde = elegirAcordeDeNotas(perfil);
+    // Manda la guitarra de acompañamiento: si toca un acorde (notas juntas),
+    // ese es el acorde, aunque otras pistas sigan sosteniendo el anterior.
+    // Si calla, o solo toca notas sueltas mientras otras pistas tocan
+    // acordes, deciden las pistas armónicas.
+    const guitarraCalla = perfil.guitarra.every((v) => v === 0);
+    const guitarraSuelta = !guitarraCalla && perfil.juntas.total === 0;
+    // Un silencio corto de la guitarra (dos tiempos) deja sonar el acorde que
+    // venía; las pistas armónicas toman el mando si calla el compás entero.
+    const compasCallado = guitarraCalla && callaElCompas(g);
+    let fuente = "guitarra";
+    let acorde = guitarraCalla ? null : elegirAcordeDeNotas(perfil);
+    if ((compasCallado || (guitarraSuelta && perfil.juntasArmonia.total > 0)) && armoniaAlcanza(perfil)) {
+      const deArmonia = elegirAcordeDeNotas(vistaDe(perfil, "armonia"), null, { basicos: true, raizSiNada: true });
+      if (deArmonia) { acorde = deArmonia; fuente = "armonia"; }
+    }
+    const vista = vistaDe(perfil, fuente);
     // Un riff de notas sueltas no alcanza para cambiar de acorde, salvo que
     // el bajo se vaya a la raíz del acorde nuevo.
-    if (acorde && anterior && perfil.juntas.total === 0 && acorde.raiz !== notaDelBajo(perfil.graves)) acorde = anterior;
+    if (acorde && anterior && vista.juntas.total === 0 && acorde.raiz !== notaDelBajo(vista.graves)) acorde = anterior;
     // Si el acorde que venía sigue explicando casi igual de bien lo que
     // suena, no se cambia (una nota de color del riff no es un acorde nuevo).
     if (acorde && anterior && !(acorde.raiz === anterior.raiz && acorde.tipo === anterior.tipo)
-        && acorde.puntaje - puntajeDeSeguir(perfil, anterior) < MARGEN_CAMBIO) {
+        && acorde.puntaje - puntajeDeSeguir(vista, anterior) < MARGEN_CAMBIO) {
       acorde = anterior;
     }
     if (acorde) anterior = acorde;
+    const nombreFuente = fuente === "guitarra" ? pistas.acompanamiento.pista.name : perfil.armonicasSonando.join(" + ");
     for (let i = g.desde; i < g.hasta; i++) {
       porPulso[i] = acorde;
+      fuentePorPulso[i] = acorde ? nombreFuente : null;
       // Acorde de paso de un solo pulso: solo si en ese pulso la guitarra toca
       // notas juntas (un rasgueo) que forman claramente otro acorde durante
       // TODO el pulso (las dos mitades pesan igual: medio pulso de otro power
@@ -452,6 +568,7 @@ function acordesDePartitura(partitura, opciones = {}) {
           && propio.explica >= CLARIDAD_ACORDE_DE_PASO
           && propio.puntaje - puntajeDeSeguir(entero, acorde) >= MARGEN_ACORDE_DE_PASO) {
         porPulso[i] = propio;
+        fuentePorPulso[i] = pistas.acompanamiento.pista.name;
       }
     }
   }
@@ -465,9 +582,9 @@ function acordesDePartitura(partitura, opciones = {}) {
   for (let i = 0; i < etiquetas.length; i++) {
     if (etiquetas[i] === null) etiquetas[i] = i > 0 ? etiquetas[i - 1] : null;
   }
-  // Los primeros pulsos sin información toman el primer acorde que aparezca.
-  const primero = etiquetas.find((e) => e !== null && e !== "N") || "N";
-  etiquetas = etiquetas.map((e) => (e === null ? primero : e));
+  // Los primeros pulsos sin información (una melodía sola, antes de que
+  // entre la armonía) quedan sin acorde.
+  etiquetas = etiquetas.map((e) => (e === null ? "N" : e));
   const raizDe = (e) => (e && e !== "N" ? Number(e.split(":")[0]) : null);
   const tipoDe = (e) => e.split(":")[1];
   // Anticipación: un acorde de un solo pulso con la misma raíz que el que
@@ -563,10 +680,17 @@ function acordesDePartitura(partitura, opciones = {}) {
     if (ultimo && ultimo.acorde === t.acorde) ultimo.hasta = t.hasta;
     else unidos.push({ desde: t.desde, hasta: t.hasta, acorde: t.acorde });
   }
+  // De qué pistas salió cada tramo (la fuente que más pulsos aportó).
+  for (const t of unidos) {
+    const cuenta = {};
+    for (let i = t.desde; i < t.hasta; i++) if (fuentePorPulso[i]) cuenta[fuentePorPulso[i]] = (cuenta[fuentePorPulso[i]] || 0) + 1;
+    t.fuente = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0] || null;
+  }
 
   return {
     tramos: unidos,
     etiquetas,          // lo elegido en cada pulso antes de unir (para las pruebas)
+    fuentePorPulso,     // de qué pistas salió el acorde de cada pulso
     pulsos,
     primeros,
     tonalidad,
@@ -575,6 +699,7 @@ function acordesDePartitura(partitura, opciones = {}) {
       acompanamiento: pistas.acompanamiento.pista.name,
       bajo: pistas.bajo ? pistas.bajo.pista.name : null,
       otras: pistas.otras.map((o) => o.pista.name),
+      armonicas: pistas.armonicas.map((o) => o.pista.name),
     },
   };
 }
