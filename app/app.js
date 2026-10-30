@@ -1038,7 +1038,28 @@ async function cargarCancion(id) {
   actualizar();
   mostrarPosicionEnLista();
   mostrarVistaTabs();   // tablatura de esta canción, si la vista "Tabs" está activa (tablaturas.js)
+  mostrarFuenteAcordes();   // "Acordes desde la tablatura" y el selector de acordes (acordes-tablatura.js)
   return true;
+}
+
+/**
+ * Cambia los acordes que se muestran por los de "cancion" (al elegir entre
+ * los del análisis y los de la tablatura, o al recalcularlos), sin volver a
+ * cargar el mp3: la canción sigue sonando donde estaba.
+ */
+function aplicarJuegoActivo(cancion) {
+  cancionActual = cancion;
+  acordes = cancion.acordes;
+  ajuste = cancion.ajuste || 0;
+  indiceActual = -1;
+  mostrarAjuste();
+  dibujarLista();
+  prepararPulsos(cancion);
+  mostrarDiagramas();
+  reiniciarMetronomo();
+  actualizar();
+  mostrarOpcionesCancion();
+  mostrarFuenteAcordes();
 }
 
 // Botón "↻": vuelve a analizar en el celular el mp3 guardado y reemplaza
@@ -1082,10 +1103,15 @@ formLista.addEventListener("submit", async (evento) => {
 botonReanalizar.addEventListener("click", async () => {
   if (idActual === null) return;
   panelOpciones.close();   // el botón está en el panel "Más"
-  // Si la canción tiene acordes corregidos a mano, se avisa que se pierden.
-  const pregunta = cancionActual && cancionActual.editada
-    ? "Esta canción tiene acordes corregidos a mano.\nSi la volvés a analizar, se pierden esos cambios. ¿Seguir?"
-    : "¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.";
+  // Si el análisis tiene acordes corregidos a mano, se avisa que se pierden.
+  // (Si se están usando los acordes de la tablatura, esos no cambian.)
+  const delAudio = juegoDe(cancionActual, "analisis");
+  const conTablatura = fuenteDe(cancionActual) === "tablatura";
+  const pregunta = delAudio && delAudio.editada
+    ? "El análisis de esta canción tiene acordes corregidos a mano.\nSi la volvés a analizar, se pierden esos cambios. ¿Seguir?"
+    : conTablatura
+      ? "¿Volver a analizar el audio de esta canción?\nSe reemplaza el análisis del audio; los acordes de la tablatura (los que estás usando) no cambian."
+      : "¿Volver a analizar esta canción en el celular?\nSe reemplazan los acordes actuales.";
   if (!confirm(pregunta)) return;
 
   const id = idActual;

@@ -64,8 +64,15 @@ function codigoAnalizador() {
   const PROBABILIDAD_CAMBIO = 0.12;
   const PREFERENCIA_TONALIDAD = 3;
 
+  // Croma del bajo: las notas de E1 a E3 (semitonos 4 a 27 desde C1), donde
+  // casi solo suena el bajo. En el Viterbi, el acorde cuya raíz es la nota
+  // más fuerte del bajo recibe este premio (igual que en analizar.py).
+  const SEMITONO_BAJO_DESDE = 4;
+  const SEMITONO_BAJO_HASTA = 28;
+  const PREMIO_BAJO_VITERBI = 4;
+
   // Lo que se usa si no se pide otra cosa (elegido con pruebas/medir_precision.py).
-  const OPCIONES_PREDETERMINADAS = { afinacion: true, mediana: true, suavizado: "viterbi", nitidez: NITIDEZ_VITERBI };
+  const OPCIONES_PREDETERMINADAS = { afinacion: true, mediana: true, suavizado: "viterbi", nitidez: NITIDEZ_VITERBI, bajo: true };
 
   const NOTAS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   const INTERVALOS = { "": [0, 4, 7], "m": [0, 3, 7], "7": [0, 4, 7, 10], "m7": [0, 3, 7, 10] };
@@ -114,6 +121,7 @@ function codigoAnalizador() {
    *   mediana:   filtro de mediana en el tiempo (borra golpes de batería del cromagrama).
    *   suavizado: "viterbi" o "mediana" (absorber tramos cortos, como antes).
    *   nitidez:   parámetro del Viterbi (cuánto pesa el parecido con cada acorde).
+   *   bajo:      premiar en el Viterbi la raíz que toca el bajo (croma de E1 a E3).
    */
   function analizar(y, nombre, opcionesPedidas) {
     if (y.length < SR) throw new Error("El audio es demasiado corto para analizarlo.");
@@ -127,17 +135,18 @@ function codigoAnalizador() {
 
     // Desafinación de la grabación, en semitonos (entre -0,5 y +0,5).
     const afinacion = opciones.afinacion ? estimarAfinacion(y) : 0;
-    const { croma, nFramesCroma } = cromagrama(y, afinacion, opciones.mediana,
+    const { croma, cromaBajo, nFramesCroma } = cromagrama(y, afinacion, opciones.mediana,
       (f) => avisar("Calculando las notas", 0.32 + 0.58 * f));
     avisar("Eligiendo los acordes", 0.92);
 
     const tonalidad = estimarTonalidad(croma, nFramesCroma);
     const rms = volumenPorFrame(y);
     const { cromaPulsos, rmsPulsos, tiempos } = promediarPorPulso(croma, nFramesCroma, rms, pulsos);
+    const bajoPulsos = opciones.bajo ? promediarPorPulso(cromaBajo, nFramesCroma, rms, pulsos).cromaPulsos : null;
 
     let acordes;
     if (opciones.suavizado === "viterbi") {
-      acordes = suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, opciones.nitidez);
+      acordes = suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, opciones.nitidez, bajoPulsos);
     } else {
       acordes = suavizar(elegirAcordes(cromaPulsos, rmsPulsos, tonalidad));
     }
@@ -612,6 +621,7 @@ function codigoAnalizador() {
     const radio = usarMediana ? MEDIANA_ARMONICA >> 1 : 0;
     const ventana = new Float32Array(MEDIANA_ARMONICA);
     const croma = new Float64Array(nFrames * 12);
+    const cromaBajo = new Float64Array(nFrames * 12);   // solo las notas graves (el bajo)
     for (let s = 0; s < nSemitonos; s++) {
       const nota = s % 12;   // C1 es la fila 0, así que s % 12 ya es la nota (0 = C)
       for (let t = 0; t < nFrames; t++) {
@@ -628,18 +638,21 @@ function codigoAnalizador() {
         const armonico = cant % 2 ? ventana[cant >> 1] : (ventana[cant / 2 - 1] + ventana[cant / 2]) / 2;
         // Sumamos todas las octavas de la misma nota.
         croma[t * 12 + nota] += armonico;
+        if (s >= SEMITONO_BAJO_DESDE && s < SEMITONO_BAJO_HASTA) cromaBajo[t * 12 + nota] += armonico;
       }
     }
 
     // Normalizamos para que la nota más fuerte de cada frame valga 1 (como librosa).
-    for (let t = 0; t < nFrames; t++) {
-      const base = t * 12;
-      let maximo = 0;
-      for (let c = 0; c < 12; c++) maximo = Math.max(maximo, croma[base + c]);
-      if (maximo > 0) for (let c = 0; c < 12; c++) croma[base + c] /= maximo;
+    for (const matriz of [croma, cromaBajo]) {
+      for (let t = 0; t < nFrames; t++) {
+        const base = t * 12;
+        let maximo = 0;
+        for (let c = 0; c < 12; c++) maximo = Math.max(maximo, matriz[base + c]);
+        if (maximo > 0) for (let c = 0; c < 12; c++) matriz[base + c] /= maximo;
+      }
     }
     alAvance(1);
-    return { croma, nFramesCroma: nFrames };
+    return { croma, cromaBajo, nFramesCroma: nFrames };
   }
 
   // Volumen (RMS) de cada frame de 2048 muestras cada 512, como librosa.feature.rms.
@@ -810,7 +823,8 @@ function codigoAnalizador() {
    * claro se mantiene, y un pulso dudoso no alcanza para cambiar.
    * Devuelve un acorde por pulso como "raiz|tipo", o null en los silencios.
    */
-  function suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, nitidez) {
+  // bajoPulsos (opcional): el croma del bajo por pulso, para premiar la raíz que toca el bajo.
+  function suavizarViterbi(cromaPulsos, rmsPulsos, tonalidad, nitidez, bajoPulsos = null) {
     const candidatos = [];
     for (let raiz = 0; raiz < 12; raiz++) {
       for (const tipo of ["", "m"]) candidatos.push({ raiz, tipo, plantilla: plantilla(raiz, tipo) });
@@ -827,8 +841,19 @@ function codigoAnalizador() {
         : Math.log(PROBABILIDAD_CAMBIO * p / total)));
     });
 
+    // Parecido de cada acorde con el pulso i (más el premio por la raíz del bajo).
+    const emision = (c, i) => {
+      let valor = nitidez * similitud(c.plantilla, cromaPulsos[i]);
+      if (bajoPulsos) {
+        const bajo = bajoPulsos[i];
+        const maximo = Math.max(...bajo);
+        if (maximo > 0) valor += PREMIO_BAJO_VITERBI * bajo[c.raiz] / maximo;
+      }
+      return valor;
+    };
+
     // Para cada pulso y cada acorde, el puntaje del mejor camino que termina ahí.
-    let puntaje = candidatos.map((c) => nitidez * similitud(c.plantilla, cromaPulsos[0]));
+    let puntaje = candidatos.map((c) => emision(c, 0));
     const desde = [];
     for (let i = 1; i < n; i++) {
       const anterior = new Int32Array(24);
@@ -840,7 +865,7 @@ function codigoAnalizador() {
           if (p > mejor) { mejor = p; mejorOrigen = origen; }
         }
         anterior[destino] = mejorOrigen;
-        nuevo[destino] = mejor + nitidez * similitud(candidatos[destino].plantilla, cromaPulsos[i]);
+        nuevo[destino] = mejor + emision(candidatos[destino], i);
       }
       desde.push(anterior);
       puntaje = nuevo;

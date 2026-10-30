@@ -300,24 +300,109 @@ function guardarAjuste(id, ajuste) {
   return actualizarCancion(id, { ajuste });
 }
 
+/* ==================================================================
+   Dos juegos de acordes: el del análisis del audio y el de la tablatura
+
+   Cada juego tiene sus acordes (con sus correcciones a mano), sus pulsos
+   y compases y su ajuste de sincronización. El que se está usando va en
+   los campos de siempre de la canción (acordes, acordesOriginales,
+   editada, pulsos, compases, ajuste): así el editor, la tira, el
+   metrónomo y "Exportar JSON" funcionan igual con cualquiera de los dos.
+   El otro queda guardado en "juegosAcordes", y "fuenteAcordes" dice cuál
+   se usa ("analisis", o "tablatura"; las canciones viejas no lo tienen y
+   usan el análisis).
+   ================================================================== */
+
+const CAMPOS_JUEGO = ["acordes", "acordesOriginales", "editada", "pulsos", "compases", "ajuste", "infoJuego"];
+
+function fuenteDe(cancion) {
+  return cancion && cancion.fuenteAcordes === "tablatura" ? "tablatura" : "analisis";
+}
+
+/** El juego de acordes de una canción para una fuente, o null si no lo tiene. */
+function juegoDe(cancion, fuente) {
+  if (!cancion) return null;
+  if (fuenteDe(cancion) === fuente) {
+    return Object.fromEntries(CAMPOS_JUEGO.map((campo) => [campo, cancion[campo]]));
+  }
+  const guardados = cancion.juegosAcordes || {};
+  return guardados[fuente] || null;
+}
+
+// Devuelve la canción con "juego" puesto en la fuente indicada (sin tocar el otro).
+function conJuego(cancion, fuente, juego) {
+  if (fuenteDe(cancion) === fuente) {
+    const activos = Object.fromEntries(CAMPOS_JUEGO.map((campo) => [campo, juego[campo] ?? null]));
+    return { ...cancion, ...activos };
+  }
+  return { ...cancion, juegosAcordes: { ...(cancion.juegosAcordes || {}), [fuente]: juego } };
+}
+
+/**
+ * Guarda el juego de acordes de una fuente. Si es la que se está usando,
+ * reemplaza los acordes de la canción; si no, queda guardado aparte.
+ * "extra" son otros campos de la canción para guardar en la misma operación.
+ * Devuelve la canción como quedó.
+ */
+function guardarJuegoAcordes(id, fuente, juego, extra = {}) {
+  let resultado = null;
+  return transaccion(["canciones"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("canciones");
+    const pedido = almacen.get(id);
+    pedido.addEventListener("success", () => {
+      if (!pedido.result) return;
+      resultado = { ...conJuego(pedido.result, fuente, juego), ...extra };
+      almacen.put(resultado);
+    });
+  }).then(() => resultado);
+}
+
+/**
+ * Cambia qué juego de acordes se usa ("analisis" o "tablatura"): el que se
+ * estaba usando pasa a "juegosAcordes" y el elegido a los campos de siempre.
+ * Devuelve la canción como quedó (o como estaba, si no tiene ese juego).
+ */
+function cambiarFuenteAcordes(id, fuente) {
+  let resultado = null;
+  return transaccion(["canciones"], "readwrite", (tx) => {
+    const almacen = tx.objectStore("canciones");
+    const pedido = almacen.get(id);
+    pedido.addEventListener("success", () => {
+      const cancion = pedido.result;
+      if (!cancion) return;
+      const actual = fuenteDe(cancion);
+      const nuevo = (cancion.juegosAcordes || {})[fuente];
+      if (actual === fuente || !nuevo) { resultado = cancion; return; }
+      const guardados = { ...(cancion.juegosAcordes || {}), [actual]: juegoDe(cancion, actual) };
+      delete guardados[fuente];
+      const activos = Object.fromEntries(CAMPOS_JUEGO.map((campo) => [campo, nuevo[campo] ?? null]));
+      resultado = { ...cancion, ...activos, juegosAcordes: guardados, fuenteAcordes: fuente };
+      almacen.put(resultado);
+    });
+  }).then(() => resultado);
+}
+
 /**
  * Reemplaza el análisis de una canción (al volver a analizarla).
- * Se mantienen el nombre, el ajuste de sincronización y el mp3.
+ * Se mantienen el nombre, el ajuste de sincronización y el mp3. Si se están
+ * usando los acordes de la tablatura, esos no se tocan: el análisis nuevo
+ * queda guardado en su juego.
  */
 function actualizarAnalisis(id, { tonalidad, tempo, acordes, pulsos, compases }) {
   return transaccion(["canciones"], "readwrite", (tx) => {
     const almacen = tx.objectStore("canciones");
     const pedido = almacen.get(id);
     pedido.addEventListener("success", () => {
-      if (pedido.result) {
-        // Un análisis nuevo reemplaza todo: también las correcciones a mano
-        // y la copia del análisis original que guarda el editor.
-        almacen.put({
-          ...pedido.result, tonalidad, tempo, acordes, pulsos, compases,
-          acordesOriginales: null, editada: false,
-          pendiente: false,   // ya está analizada (por si se había agregado sin analizar)
-        });
-      }
+      const cancion = pedido.result;
+      if (!cancion) return;
+      // Un análisis nuevo reemplaza todo el juego del análisis: también las
+      // correcciones a mano y la copia del análisis original que guarda el editor.
+      const anterior = juegoDe(cancion, "analisis") || {};
+      const juego = { acordes, pulsos, compases, acordesOriginales: null, editada: false, ajuste: anterior.ajuste || 0 };
+      almacen.put({
+        ...conJuego(cancion, "analisis", juego), tonalidad, tempo,
+        pendiente: false,   // ya está analizada (por si se había agregado sin analizar)
+      });
     });
   });
 }

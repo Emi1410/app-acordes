@@ -255,8 +255,7 @@ function compasesConPulsos(recta, tiemposCompas, pulsosMp3) {
  * Todo el proceso. Devuelve { inicio (ms), puntos: [{ compas, ms, confianza }],
  * escala, confianzaInicio } o tira un error si no se pudo.
  */
-async function calcularSincronizacionAutomatica(alProgreso) {
-  const partitura = apiTabs.score;
+async function calcularSincronizacionAutomatica(alProgreso, partitura = apiTabs.score, tiempos = tiemposPartitura) {
   const mp3 = await obtenerAudio(idActual);
   alProgreso(0.02, "Escuchando los ataques del mp3");
   const { envolvente, fps } = await analizarMp3(mp3, "", (f) => alProgreso(0.02 + 0.6 * f, "Escuchando los ataques del mp3"), null, { soloAtaques: true });
@@ -266,7 +265,7 @@ async function calcularSincronizacionAutomatica(alProgreso) {
   const audio = suavizarYNormalizar(envolvente);
   const ataques = ataquesDePartitura(partitura);
   if (ataques.length < 50) throw new Error("La tablatura tiene muy pocas notas para sincronizar.");
-  const duracionPartitura = tiemposPartitura[tiemposPartitura.length - 1];
+  const duracionPartitura = tiempos[tiempos.length - 1];
   const largoPartitura = Math.ceil(duracionPartitura / 1000 * fps) + 1;
   const curvaPartitura = suavizarYNormalizar(curvaDePartitura(ataques, fps, largoPartitura));
   const ataquesCuadros = ataques.map(({ ms, peso }) => ({ cuadro: ms / 1000 * fps, peso }));
@@ -274,18 +273,21 @@ async function calcularSincronizacionAutomatica(alProgreso) {
   const global = busquedaGlobal(audio, ataquesCuadros, fps);
   alProgreso(0.85, "Siguiendo los cambios de tempo");
   const recta = (t) => (global.corrimiento + global.escala * t / 1000 * fps) / fps * 1000;
-  const tiemposCompas = tiemposPartitura.slice(0, -1);
+  const tiemposCompas = tiempos.slice(0, -1);
 
-  // En qué ms del mp3 empieza cada compás, con su confianza.
+  // En qué ms del mp3 empieza cada compás, con su confianza. Se usan los
+  // pulsos que detectó el análisis del audio (aunque la canción esté usando
+  // los acordes de la tablatura, que traen los pulsos de la partitura).
   let compases;
-  const pulsos = cancionActual && Array.isArray(cancionActual.pulsos) ? cancionActual.pulsos : [];
+  const delAudio = juegoDe(cancionActual, "analisis");
+  const pulsos = delAudio && Array.isArray(delAudio.pulsos) ? delAudio.pulsos : [];
   if (pulsos.length >= 50) {
     compases = compasesConPulsos(recta, tiemposCompas, pulsos);
   } else {
     // Sin pulsos detectados (canción vieja): la recta global, y la confianza según
     // qué tan bien coinciden los ataques alrededor de cada compás.
     const audioDeCuadro = new Float32Array(curvaPartitura.length).map((_, j) => global.corrimiento + global.escala * j);
-    const cuadrosPorCompas = (tiemposPartitura[1] - tiemposPartitura[0]) / 1000 * fps;
+    const cuadrosPorCompas = (tiempos[1] - tiempos[0]) / 1000 * fps;
     compases = tiemposCompas.map((t, b) => {
       const j = t / 1000 * fps;
       const r = correlacionLocal(audio, curvaPartitura, audioDeCuadro, Math.round(j - 2 * cuadrosPorCompas), Math.round(j + 2 * cuadrosPorCompas));

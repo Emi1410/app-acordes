@@ -168,6 +168,7 @@ async function mostrarBotonTablatura() {
   const id = idActual;
   const tiene = id !== null && !!(await obtenerTablatura(id).catch(() => null));
   if (id === idActual) textoTablatura.textContent = tiene ? "Cambiar tablatura (.gp)" : "Agregar tablatura (.gp)";
+  mostrarFuenteAcordes();   // el botón "Acordes desde la tablatura" (acordes-tablatura.js)
 }
 
 /* ------------------------------------------------------------------
@@ -407,20 +408,26 @@ function calcularTiemposPartitura(partitura) {
  *     al tempo del último tramo marcado (o al de la partitura si no hay).
  */
 function puntosParaAlphaTab() {
-  const marcados = [{ compas: 1, ms: syncTabs.inicio }, ...syncTabs.puntos.filter((p) => p.compas > 1)]
+  return puntosDeSincronizacion(syncTabs, tiemposPartitura);
+}
+
+// Lo mismo para cualquier sincronización y partitura (también la usan los
+// acordes desde la tablatura, ver acordes-tablatura.js).
+function puntosDeSincronizacion(sync, tiempos) {
+  const marcados = [{ compas: 1, ms: sync.inicio || 0 }, ...(sync.puntos || []).filter((p) => p.compas > 1)]
     .sort((a, b) => a.compas - b.compas);
   const lista = marcados.map((p) => ({ barIndex: p.compas - 1, barOccurence: 0, barPosition: 0, millisecondOffset: p.ms }));
 
-  const ultimoCompas = tiemposPartitura.length - 2;          // índice del último compás
+  const ultimoCompas = tiempos.length - 2;                   // índice del último compás
   const ultimo = marcados[marcados.length - 1];
   if (ultimo.compas - 1 < ultimoCompas) {
     let escala = 1;                                          // ms de audio por ms de partitura
     if (marcados.length >= 2) {
       const anterior = marcados[marcados.length - 2];
-      const partitura = tiemposPartitura[ultimo.compas - 1] - tiemposPartitura[anterior.compas - 1];
+      const partitura = tiempos[ultimo.compas - 1] - tiempos[anterior.compas - 1];
       if (partitura > 0) escala = (ultimo.ms - anterior.ms) / partitura;
     }
-    const resto = tiemposPartitura[tiemposPartitura.length - 1] - tiemposPartitura[ultimo.compas - 1];
+    const resto = tiempos[tiempos.length - 1] - tiempos[ultimo.compas - 1];
     lista.push({ barIndex: ultimoCompas, barOccurence: 0, barPosition: 1, millisecondOffset: ultimo.ms + escala * resto });
   }
   return lista;
@@ -436,7 +443,12 @@ function aplicarSyncTabs() {
 function guardarSyncTabs() {
   if (idActual === null) return;
   const datos = { inicio: syncTabs.inicio, puntos: syncTabs.puntos.slice(), confianzaInicio: syncTabs.confianzaInicio };
-  actualizarCancion(idActual, { tabSync: datos }).catch(() => {});
+  const id = idActual, partitura = apiTabs && apiTabs.score, tiempos = tiemposPartitura;
+  actualizarCancion(id, { tabSync: datos })
+    // Si la canción tiene acordes sacados de la tablatura, se corren con la
+    // sincronización nueva (acordes-tablatura.js).
+    .then(() => reubicarAcordesTablatura(id, partitura, tiempos, datos))
+    .catch(() => {});
   cancionActual = { ...cancionActual, tabSync: datos };
   mostrarSync();
   aplicarSyncTabs();

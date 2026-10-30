@@ -1868,3 +1868,49 @@ body {
   font-size: 0.8rem;
   line-height: 1.5;
 }
+
+/* ------------------------------------------------------------------
+   Panel "Más": acordes de la tablatura
+   ------------------------------------------------------------------ */
+
+/* Qué acordes usar (análisis del audio o tablatura): en la grilla de acciones */
+.selector-fuente {
+  min-height: 36px;
+  min-width: 0;
+  padding: 0 8px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+/* "Reproducir al abrir" y "Reproducción continua" en una sola fila */
+.fila-interruptores {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.fila-interruptores .interruptor {
+  gap: 8px;
+  font-size: 0.85rem;
+  line-height: 1.15;
+}
+
+.fila-interruptores .interruptor input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+/* El aclaración "(sigue con la próxima)" queda en el title (no entra en media fila) */
+.fila-interruptores .interruptor small {
+  display: none;
+}
+
+/* Un poco menos de espacio entre filas, para que entre todo sin desplazarse */
+.hoja-contenido {
+  gap: 5px;
+}

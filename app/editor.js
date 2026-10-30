@@ -471,8 +471,10 @@ const botonExportar = document.getElementById("boton-exportar");
 const botonRestaurar = document.getElementById("boton-restaurar");
 
 // "Restaurar análisis original" solo aparece si la canción fue editada.
+// Con los acordes de la tablatura, vuelve a los que se calcularon de ella.
 function mostrarOpcionesCancion() {
   botonRestaurar.hidden = !(cancionActual && cancionActual.editada && cancionActual.acordesOriginales);
+  botonRestaurar.textContent = fuenteDe(cancionActual) === "tablatura" ? "Restaurar acordes de la tablatura" : "Restaurar análisis original";
 }
 
 // Baja un JSON con la canción (acordes editados incluidos). Tiene el mismo
@@ -506,7 +508,11 @@ botonExportar.addEventListener("click", async () => {
 });
 
 botonRestaurar.addEventListener("click", async () => {
-  if (!confirm("¿Volver a los acordes del análisis original?\nSe pierden las correcciones hechas a mano.")) return;
+  const deTablatura = fuenteDe(cancionActual) === "tablatura";
+  const pregunta = deTablatura
+    ? "¿Volver a los acordes que salieron de la tablatura?\nSe pierden las correcciones hechas a mano."
+    : "¿Volver a los acordes del análisis original?\nSe pierden las correcciones hechas a mano.";
+  if (!confirm(pregunta)) return;
   terminarEdicion();
   try {
     const c = await obtenerCancion(idActual);
@@ -517,5 +523,5 @@ botonRestaurar.addEventListener("click", async () => {
   }
   panelOpciones.close();
   await cargarCancion(idActual);
-  mostrarMensaje("Análisis original restaurado");
+  mostrarMensaje(deTablatura ? "Acordes de la tablatura restaurados" : "Análisis original restaurado");
 });

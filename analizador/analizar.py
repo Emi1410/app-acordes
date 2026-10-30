@@ -121,6 +121,61 @@ def detectar_pulsos(y_percusiva, sr):
 # 3. Cromagrama
 # ---------------------------------------------------------------------------
 
+# Compresión logarítmica del croma (opción "log"): log(1 + COMPRESION_LOG * energía).
+# Así una nota suave (la tercera de un acorde distorsionado) no queda tapada
+# por las más fuertes.
+COMPRESION_LOG = 100.0
+
+# Croma del bajo (opción "bajo"): las notas entre E1 y E3, donde casi solo
+# suena el bajo. En el Viterbi, el acorde cuya raíz es la nota más fuerte del
+# bajo recibe este premio (en las mismas unidades que NITIDEZ_VITERBI).
+# Medido con pruebas/medir_precision.py en las dos canciones de referencia
+# (F1 Cuchillos / Intoxicarme; sin el bajo: 93,0 % / 73,1 %):
+#   premio 2: 94,0 % / 80,8 %   premio 4: 94,4 % / 85,5 %
+#   premio 8: 92,0 % / 86,4 %   premio 12: 87,8 % / 81,2 %
+# Con 2 a 4 mejoran las dos; con más, el bajo empieza a pesar más que la
+# guitarra y Cuchillos empeora.
+PREMIO_BAJO_VITERBI = 4.0
+
+# Resolución del CQT que usa librosa para el croma: 3 bandas por semitono.
+BANDAS_POR_OCTAVA = 36
+
+
+def cqt_magnitud(y, sr, fmin, octavas, corregir_afinacion):
+    """Espectrograma de "constante Q" (una banda por tercio de semitono) en magnitud."""
+    afinacion = librosa.estimate_tuning(y=y, sr=sr, bins_per_octave=BANDAS_POR_OCTAVA) if corregir_afinacion else 0.0
+    return np.abs(librosa.cqt(y=y, sr=sr, fmin=fmin, n_bins=octavas * BANDAS_POR_OCTAVA,
+                              bins_per_octave=BANDAS_POR_OCTAVA, tuning=afinacion))
+
+
+def calcular_croma_log(y, sr, corregir_afinacion=True):
+    """Como calcular_cromagrama, pero con la energía comprimida en escala logarítmica."""
+    fmin = librosa.note_to_hz("C1")
+    cqt = cqt_magnitud(y, sr, fmin, 7, corregir_afinacion)
+    croma = librosa.feature.chroma_cqt(C=np.log1p(COMPRESION_LOG * cqt), sr=sr, fmin=fmin,
+                                       bins_per_octave=BANDAS_POR_OCTAVA, n_octaves=7)
+    return croma, librosa.feature.rms(y=y)
+
+
+def calcular_croma_bajo(y, sr, corregir_afinacion=True):
+    """Croma de las notas graves (E1 a E3): sirve para saber qué nota toca el bajo."""
+    fmin = librosa.note_to_hz("E1")
+    cqt = cqt_magnitud(y, sr, fmin, 2, corregir_afinacion)
+    return librosa.feature.chroma_cqt(C=cqt, sr=sr, fmin=fmin, bins_per_octave=BANDAS_POR_OCTAVA, n_octaves=2)
+
+
+def reforzar_con_repeticiones(croma_unidades):
+    """
+    Opción "repeticiones": cada pulso se compara con los pulsos más parecidos
+    del resto de la canción (las otras veces que se toca esa parte) y se
+    queda con lo que tienen en común (la mediana). Las notas sueltas de la
+    voz o de un solo, que cambian de una vuelta a otra, pierden peso.
+    Es el "enhanced chroma" de la documentación de librosa, aplicado por pulso.
+    """
+    filtrado = librosa.decompose.nn_filter(croma_unidades, aggregate=np.median, metric="cosine")
+    return np.minimum(croma_unidades, filtrado)
+
+
 def calcular_cromagrama(y_armonica, sr, corregir_afinacion=True):
     """
     Calcula el cromagrama: para cada frame, cuánta energía tiene cada una de
@@ -352,7 +407,7 @@ PROBABILIDAD_CAMBIO = 0.12      # chance de cambiar de acorde en cada pulso
 PREFERENCIA_TONALIDAD = 3.0     # cuántas veces más probable es cambiar a un acorde de la tonalidad
 
 
-def suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso=1):
+def suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso=1, bajo_unidades=None):
     """
     Elige los acordes con el algoritmo de Viterbi, en lugar de elegir cada
     pulso por separado y después "borrar" los tramos cortos.
@@ -365,12 +420,19 @@ def suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso
         cambiar a uno de afuera.
     Así, un acorde corto pero claro se mantiene (el parecido le gana al costo
     de cambiar), mientras que un pulso dudoso no alcanza para cambiar.
+    Si se pasa bajo_unidades (el croma del bajo por pulso), además se premia
+    el acorde cuya raíz es la nota que más toca el bajo en ese pulso.
     Devuelve una lista de (raiz, tipo) por unidad, o None en los silencios.
     """
     candidatos = [(raiz, tipo) for raiz in range(12) for tipo in ("", "m")]
     plantillas = np.array([plantilla(raiz, tipo) for raiz, tipo in candidatos])
     similitudes = plantillas @ normalizar(croma_unidades)          # 24 x N
     emision = NITIDEZ_VITERBI * similitudes                         # log-probabilidades (sin normalizar)
+    if bajo_unidades is not None:
+        # Cada pulso del bajo llevado a "la nota más fuerte vale 1".
+        bajo = bajo_unidades / (bajo_unidades.max(axis=0, keepdims=True) + 1e-9)
+        raices = np.array([raiz for raiz, _ in candidatos])
+        emision = emision + PREMIO_BAJO_VITERBI * bajo[raices, :]
 
     # Transiciones: la probabilidad de cambio es por pulso; si analizamos a
     # medio pulso, cada mitad tiene la mitad de chance de cambiar.
@@ -550,10 +612,15 @@ def guardar_json(nombre, tempo, tonalidad, tramos, pulsos, compases):
 #   - suavizado Viterbi: sí. Recupera acordes cortos que la mediana borraba
 #     (la cobertura del cifrado sube de 84,7 % a 90,1 %).
 #   - medio_pulso: no. Solo, empeora (88,0 %), y junto con Viterbi no suma.
-OPCIONES_PREDETERMINADAS = {"afinacion": True, "hpss": False, "suavizado": "viterbi", "medio_pulso": False}
+#   - bajo: sí (agregado después, con dos canciones de referencia). Es la única
+#     mejora que subió el F1 en las dos: 93,0 -> 94,4 % y 73,1 -> 85,5 %,
+#     unos 2-3 s más. HPSS, medio pulso, croma logarítmico y croma reforzado
+#     con repeticiones mejoraron una sola de las dos (o ninguna).
+OPCIONES_PREDETERMINADAS = {"afinacion": True, "hpss": False, "suavizado": "viterbi", "medio_pulso": False,
+                            "bajo": True}
 
 # Las de la versión anterior, para poder comparar.
-OPCIONES_ORIGINALES = {"afinacion": True, "hpss": True, "suavizado": "mediana", "medio_pulso": False}
+OPCIONES_ORIGINALES = {"afinacion": True, "hpss": True, "suavizado": "mediana", "medio_pulso": False, "bajo": False}
 
 
 def analizar_audio(y, sr, opciones=None):
@@ -564,9 +631,14 @@ def analizar_audio(y, sr, opciones=None):
       hpss:        separar batería y parte armónica antes de analizar.
       suavizado:   "mediana" (absorber tramos cortos) o "viterbi".
       medio_pulso: analizar cada medio pulso en vez de cada pulso.
-    Lo que no se indica se toma de OPCIONES_PREDETERMINADAS.
+      log:          croma con compresión logarítmica (calcular_croma_log).
+      repeticiones: croma reforzado con las partes que se repiten (reforzar_con_repeticiones).
+      bajo:         premiar en el Viterbi la raíz que toca el bajo (calcular_croma_bajo).
+    Lo que no se indica se toma de OPCIONES_PREDETERMINADAS (y las tres
+    últimas, si no están ahí, quedan apagadas).
     """
     opciones = {**OPCIONES_PREDETERMINADAS, **(opciones or {})}
+    opciones = {"log": False, "repeticiones": False, "bajo": False, **opciones}
 
     # Separamos el audio en parte armónica (instrumentos con notas) y
     # percusiva (batería). Cada una se usa para lo que mejor sirve.
@@ -576,16 +648,25 @@ def analizar_audio(y, sr, opciones=None):
         y_armonica = y_percusiva = y
 
     tempo, frames_pulsos = detectar_pulsos(y_percusiva, sr)
-    croma, rms = calcular_cromagrama(y_armonica, sr, opciones["afinacion"])
+    if opciones["log"]:
+        croma, rms = calcular_croma_log(y_armonica, sr, opciones["afinacion"])
+    else:
+        croma, rms = calcular_cromagrama(y_armonica, sr, opciones["afinacion"])
     tonalidad = estimar_tonalidad(croma)
 
     # Unidades de análisis: pulsos, o medios pulsos.
     unidades_por_pulso = 2 if opciones["medio_pulso"] else 1
     frames_unidades = subdividir_pulsos(frames_pulsos) if opciones["medio_pulso"] else frames_pulsos
     croma_unidades, rms_unidades, tiempos = promediar_por_pulso(croma, rms, sr, frames_unidades)
+    if opciones["repeticiones"]:
+        croma_unidades = reforzar_con_repeticiones(croma_unidades)
+    bajo_unidades = None
+    if opciones["bajo"]:
+        croma_bajo = calcular_croma_bajo(y, sr, opciones["afinacion"])
+        bajo_unidades, _, _ = promediar_por_pulso(croma_bajo, rms, sr, frames_unidades)
 
     if opciones["suavizado"] == "viterbi":
-        acordes = suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso)
+        acordes = suavizar_viterbi(croma_unidades, rms_unidades, tonalidad, unidades_por_pulso, bajo_unidades)
     else:
         acordes = elegir_acordes(croma_unidades, rms_unidades, tonalidad)
         acordes = suavizar(acordes, MINIMO_PULSOS * unidades_por_pulso)
