@@ -5,15 +5,17 @@
 
    Un mástil como el de una Les Paul (Eko LS-300): diapasón de palisandro
    con veta, trastes de níquel con la separación real (cada vez más juntos
-   hacia el cuerpo), incrustaciones trapezoidales nacaradas, filete crema,
-   cejuela de hueso y, al pie, un poco del cuerpo cherry sunburst con un
-   humbucker chico (donde se pulsa la cuerda).
+   hacia el cuerpo), incrustaciones trapezoidales nacaradas chicas, filete
+   crema y cejuela de hueso. Sin cuerpo ni micrófono: el diapasón ocupa
+   todo el ancho disponible.
 
-   Dos modos (botón en la barra de Tabs, se recuerda):
+   Dos modos (opción en "Pistas y sync", se recuerda):
      - acostado: debajo de la tablatura, para leerla;
      - parado (pantalla completa): sin la tablatura, el mástil ocupa toda
        la vista para tocar siguiendo las notas. Con el celular vertical se
        dibuja parado (clavijero arriba); acostado, a lo largo de la pantalla.
+   El "modo tocar" (practica.js) lo fuerza acostado y grande, con un
+   renglón de tablatura arriba.
    Si entra completo (en la compu) se ve entero; si no, el tramo visible
    sigue a las notas, suave y anticipándose a las que vienen.
 
@@ -23,7 +25,7 @@
        tenues, según la opción).
 
    Las cuerdas que no suenan, grises; las que suenan se encienden con su
-   color (configurable) desde el dedo hasta el micrófono y vibran. Cada nota
+   color (configurable) desde el dedo hasta el final del mástil y vibran. Cada nota
    es un círculo del color de su cuerda con el número de traste (o el nombre
    de la nota). Como en Guitar Hero, las que vienen se ven tenues un instante
    antes. Técnicas leídas nota por nota del .gp:
@@ -50,7 +52,7 @@
    ================================================================== */
 
 const contenedorMastil = document.getElementById("mastil");
-const botonOrientacionMastil = document.getElementById("orientacion-mastil");
+const selectorOrientacionMastil = document.getElementById("orientacion-mastil");
 const selectorEtiquetaMastil = document.getElementById("etiqueta-mastil");
 const selectorAcordesOtra = document.getElementById("mastil-acordes-otra");
 const casillaEfectosReducidos = document.getElementById("mastil-efectos-reducidos");
@@ -85,6 +87,9 @@ try {
 } catch {
   // valores por defecto
 }
+
+// Parado solo fuera del modo tocar: ahí el mástil va siempre acostado y grande (practica.js).
+const mastilParado = () => orientacionMastil === "vertical" && !(typeof modoTocar !== "undefined" && modoTocar);
 
 function guardarPreferencia(clave, valor) {
   try { localStorage.setItem(clave, valor); } catch { /* queda para esta sesión */ }
@@ -219,7 +224,7 @@ function queMostrar(t) {
 let medidasMastil = null;
 let lienzo = null, contexto2d = null;
 let imagenMadera = null;          // el palisandro con su veta y el filete (fijo)
-let imagenMarco = null;           // clavijero, cejuela y cuerpo con el micrófono (fijos)
+let imagenMarco = null;           // clavijero, clavijas y cejuela (fijos)
 let primerTrasteVisible = 0;      // el que se pide (entero)
 let desplazamientoActual = 0;     // el que se dibuja (se acerca de a poco: movimiento suave)
 let ultimoCuadro = 0;
@@ -246,12 +251,12 @@ function calcularMedidas() {
   const anchoCss = contenedorMastil.clientWidth || 340;
   const altoCss = contenedorMastil.clientHeight || 150;
   // Parado se dibuja a lo largo del lado más largo de la pantalla.
-  const vertical = orientacionMastil === "vertical" && altoCss > anchoCss;
+  const vertical = mastilParado() && altoCss > anchoCss;
   const largo = vertical ? altoCss : anchoCss;       // a lo largo del mástil
   const ancho = vertical ? anchoCss : altoCss;       // a lo ancho
   const clavijero = 28;
   const aire = 24;
-  const cuerpo = orientacionMastil === "vertical" ? 30 : Math.round(Math.min(52, Math.max(34, largo * 0.07)));
+  const cuerpo = 4;                                  // sin cuerpo: un margen mínimo al final
   const zona = Math.max(80, largo - clavijero - aire - cuerpo);
   // Parado entran al menos 12 en un celular (los trastes son anchos a lo ancho del mástil).
   const trastesVisibles = trastesQueEntran(zona, vertical ? 25 : 26);
@@ -263,7 +268,7 @@ function calcularMedidas() {
   return {
     vertical, anchoCss, altoCss, largo, ancho, clavijero, aire, cuerpo, zona, trastesVisibles,
     numeros, filete, arriba, abajo, cuerdas, entreCuerdas,
-    xCejuela: clavijero + aire, xFinZona: clavijero + aire + zona, xMicrofono: largo - cuerpo / 2,
+    xCejuela: clavijero + aire, xFinZona: clavijero + aire + zona,
     // Parado, el círculo no puede pasar del ancho del traste más angosto.
     radio: Math.max(8, Math.min(vertical ? 13 : 15, entreCuerdas * 0.5)),
     escala: window.devicePixelRatio || 1,
@@ -331,8 +336,7 @@ function dibujarMadera(m) {
 }
 
 // Los extremos: clavijero con sus clavijas, la columna de las cuerdas al
-// aire, la cejuela de hueso, y al pie un poco del cuerpo cherry sunburst
-// flameado con un humbucker chico.
+// aire y la cejuela de hueso (sin cuerpo ni micrófono, para no quitar lugar).
 function dibujarMarco(m) {
   const [c, g] = crearLienzo(m.largo, m.ancho, m.escala);
   // Clavijero negro
@@ -360,45 +364,9 @@ function dibujarMarco(m) {
     g.beginPath(); g.arc(x, m.abajo + 2, 2.6, 0, Math.PI * 2); g.fill();
   }
 
-  // Cuerpo: cherry sunburst con flama (solo una franja, como referencia)
-  const x0 = m.xFinZona;
-  const medio = (m.arriba + m.abajo) / 2;
-  const cuerpo = g.createRadialGradient(x0 + m.cuerpo * 0.6, medio, 2, x0 + m.cuerpo * 0.6, medio, Math.max(m.cuerpo * 1.5, m.ancho * 0.8));
-  cuerpo.addColorStop(0, "#f2b13a");
-  cuerpo.addColorStop(0.35, "#d8661b");
-  cuerpo.addColorStop(0.7, "#8e1414");
-  cuerpo.addColorStop(1, "#3a0505");
-  g.fillStyle = cuerpo;
-  g.fillRect(x0, 0, m.cuerpo, m.ancho);
-  const azar = azarFijo(19);
-  for (let i = 0; i < 14; i++) {
-    const x = x0 + azar() * m.cuerpo;
-    g.strokeStyle = azar() < 0.5 ? "rgba(255,220,150,0.16)" : "rgba(60,0,0,0.16)";
-    g.lineWidth = 1 + azar() * 2.5;
-    g.beginPath();
-    g.moveTo(x, 0);
-    for (let y = 0; y <= m.ancho; y += 8) g.lineTo(x + Math.sin(y / 9 + i) * 2.5, y);
-    g.stroke();
-  }
-  // Humbucker chico: marco crema y dos bobinas negras con un tornillo por cuerda
-  const largoMic = Math.min(m.cuerpo * 0.7, 24);
-  const xm = m.xMicrofono - largoMic / 2;
-  const ym = m.arriba + 2, altoMic = m.abajo - m.arriba - 4;
-  g.fillStyle = "#e9dfc6";
-  redondeado(g, xm - 2, ym - 2, largoMic + 4, altoMic + 4, 3);
-  g.fill();
-  for (let bobina = 0; bobina < 2; bobina++) {
-    const xb = xm + bobina * largoMic / 2 + 1;
-    g.fillStyle = "#121212";
-    redondeado(g, xb, ym, largoMic / 2 - 2, altoMic, 2);
-    g.fill();
-    for (let fila = 0; fila < m.cuerdas; fila++) {
-      g.fillStyle = bobina ? "#9aa0a6" : "#c8cdd2";
-      g.beginPath();
-      g.arc(xb + (largoMic / 2 - 2) / 2, yDeCuerda(m, fila), Math.min(2, m.entreCuerdas * 0.14), 0, Math.PI * 2);
-      g.fill();
-    }
-  }
+  // Fin del diapasón: un borde fino oscuro
+  g.fillStyle = "#140b06";
+  g.fillRect(m.xFinZona, m.arriba, m.cuerpo, m.abajo - m.arriba);
   return c;
 }
 
@@ -432,7 +400,7 @@ function redondeado(g, x, y, ancho, alto, r) {
 function dibujarMastil() {
   const hay = guitarrasMastil.some(Boolean);
   contenedorMastil.hidden = !hay;
-  vistaTabs.classList.toggle("mastil-parado", hay && orientacionMastil === "vertical");
+  vistaTabs.classList.toggle("mastil-parado", hay && mastilParado());
   if (!hay) return;
   if (!lienzo) {
     lienzo = document.createElement("canvas");
@@ -561,7 +529,7 @@ function dibujarCuadro(marca) {
     textoDerecho(g, m, nombres[deReferencia.afinacion[fila] % 12], m.clavijero / 2 + 1, yDeCuerda(m, fila));
   }
 
-  // Cuerdas: grises las que no suenan; las que suenan, encendidas del dedo al micrófono y vibrando
+  // Cuerdas: grises las que no suenan; las que suenan, encendidas del dedo al final y vibrando
   const activas = new Map();   // fila -> { nota, evento }
   for (const evento of visto.eventos) for (const nota of evento.notas) if (!nota.muerta) activas.set(nota.fila, { nota, evento });
   for (let fila = 0; fila < m.cuerdas; fila++) {
@@ -602,15 +570,18 @@ function dibujarTrastes(g, m) {
     if (traste <= desde || traste > hasta) continue;
     const x0 = xDeLinea(m, traste - 1), x1 = xDeLinea(m, traste);
     const centro = (x0 + x1) / 2, ancho = x1 - x0;
-    const largoMayor = Math.min(alto * 0.5, ancho * 0.36), largoMenor = largoMayor * 0.72;
-    const yA = y0 + alto * 0.22, yB = y0 + alto * 0.78;
+    // Chicas: menos de la mitad del traste y, a lo ancho, hasta un 30 % del
+    // diapasón sin pasar de 1,4 veces su largo (no se estiran en pantallas altas).
+    const largoMayor = Math.min(alto * 0.28, ancho * 0.42), largoMenor = largoMayor * 0.78;
+    const altoIncrustacion = Math.min(alto * 0.3, largoMayor * 1.4);
+    const yA = y0 + (alto - altoIncrustacion) / 2, yB = yA + altoIncrustacion;
     const nacar = g.createLinearGradient(centro - largoMayor, yA, centro + largoMayor, yB);
-    nacar.addColorStop(0, "#efe9dc");
-    nacar.addColorStop(0.3, "#d6e5e8");
-    nacar.addColorStop(0.5, "#f3e4ec");
-    nacar.addColorStop(0.7, "#dfeee0");
-    nacar.addColorStop(1, "#e9e2d4");
-    g.globalAlpha = 0.88;
+    nacar.addColorStop(0, "#d8cfbd");
+    nacar.addColorStop(0.3, "#b9d0d6");
+    nacar.addColorStop(0.5, "#e4cfdb");
+    nacar.addColorStop(0.7, "#c5dcc7");
+    nacar.addColorStop(1, "#d3c9b6");
+    g.globalAlpha = 0.72;
     g.fillStyle = nacar;
     g.beginPath();
     g.moveTo(centro - largoMayor / 2, yA);
@@ -620,9 +591,9 @@ function dibujarTrastes(g, m) {
     g.closePath();
     g.fill();
     // un reflejo fino
-    g.globalAlpha = 0.5;
+    g.globalAlpha = 0.35;
     g.strokeStyle = "#ffffff";
-    g.lineWidth = 0.8;
+    g.lineWidth = 0.6;
     g.beginPath();
     g.moveTo(centro - largoMayor * 0.3, yA + 2);
     g.lineTo(centro - largoMenor * 0.2, yB - 2);
@@ -681,7 +652,7 @@ function moverVentana(m, visto, t) {
 const grosorCuerda = (m, fila) => 0.7 + (fila / Math.max(1, m.cuerdas - 1)) * 1.9;
 
 /**
- * Una cuerda. Si no suena, gris (apagada). Si suena, del dedo al micrófono
+ * Una cuerda. Si no suena, gris (apagada). Si suena, del dedo al final del mástil
  * va encendida con su color y vibrando (más al pulsarla, y ondulando si
  * tiene vibrato); si se estira, se curva hacia el costado en el dedo.
  * Devuelve true si se mueve.
@@ -689,7 +660,7 @@ const grosorCuerda = (m, fila) => 0.7 + (fila / Math.max(1, m.cuerdas - 1)) * 1.
 function dibujarCuerda(g, m, fila, activa, t, opacidad) {
   const y = yDeCuerda(m, fila);
   const grosor = grosorCuerda(m, fila);
-  const xInicio = m.clavijero - 2, xFin = m.largo - 4;
+  const xInicio = m.clavijero - 2, xFin = m.largo;
   if (!activa) {
     g.strokeStyle = CUERDA_APAGADA;
     g.lineWidth = grosor;
@@ -705,7 +676,7 @@ function dibujarCuerda(g, m, fila, activa, t, opacidad) {
   g.strokeStyle = CUERDA_APAGADA;
   g.lineWidth = grosor;
   g.beginPath(); g.moveTo(xInicio, y); g.lineTo(xDedo, yDedo); g.stroke();
-  // Del dedo al micrófono: encendida y vibrando
+  // Del dedo al final: encendida y vibrando
   const desdeAtaque = nota.continua ? 1e9 : t - evento.inicio;
   const amplitud = efectosReducidos ? 0 : 2.6 * Math.exp(-Math.max(0, desdeAtaque) / 380);
   const vibrato = nota.vibrato && !efectosReducidos ? t : null;
@@ -913,29 +884,26 @@ function dibujarProxima(g, m, nota, evento, t) {
 }
 
 /* ------------------------------------------------------------------
-   Opciones: modo (botón en la barra de Tabs) y "Pistas y sync"
+   Opciones (en "Pistas y sync")
    ------------------------------------------------------------------ */
 
 function mostrarOpcionesMastil() {
-  const parado = orientacionMastil === "vertical";
-  botonOrientacionMastil.setAttribute("aria-pressed", String(parado));
-  const texto = parado ? "Mástil acostado (con la tablatura)" : "Mástil parado a pantalla completa (para tocar)";
-  botonOrientacionMastil.title = texto;
-  botonOrientacionMastil.setAttribute("aria-label", texto);
+  selectorOrientacionMastil.value = orientacionMastil;
   selectorEtiquetaMastil.value = etiquetaMastil;
   selectorAcordesOtra.value = acordesOtra;
   casillaEfectosReducidos.checked = efectosReducidos;
   for (const entrada of entradasColorCuerda) entrada.value = coloresCuerda[Number(entrada.dataset.cuerda)];
 }
 
-botonOrientacionMastil.addEventListener("click", () => {
-  orientacionMastil = orientacionMastil === "vertical" ? "horizontal" : "vertical";
+// Acostado (con la tablatura) o parado (pantalla completa, sin la tablatura).
+selectorOrientacionMastil.addEventListener("change", () => {
+  orientacionMastil = selectorOrientacionMastil.value === "vertical" ? "vertical" : "horizontal";
   guardarPreferencia("mastilOrientacion", orientacionMastil);
   mostrarOpcionesMastil();
   dibujarMastil();
   // La tablatura vuelve a verse (o se oculta): alphaTab vuelve a armar los renglones.
-  if (apiTabs && tabsListas && orientacionMastil === "horizontal") apiTabs.render();
-  if (tabsListas && orientacionMastil === "vertical") mostrarAvisoTabs("");
+  if (apiTabs && tabsListas && !mastilParado()) apiTabs.render();
+  if (tabsListas && mastilParado()) mostrarAvisoTabs("");
 });
 
 selectorEtiquetaMastil.addEventListener("change", () => {

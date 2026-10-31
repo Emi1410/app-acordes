@@ -2100,6 +2100,9 @@ function actualizar() {
   tiempoActual.textContent = formatoTiempo(audio.currentTime);
   if (!arrastrando) barraTiempo.value = audio.currentTime;
 
+  // Bucle A–B: al llegar al final del compás B vuelve al A (practica.js).
+  revisarBucleAB();
+
   // Vista de tablaturas: le contamos a alphaTab dónde está el mp3 (tablaturas.js).
   actualizarTabs();
 
@@ -2253,6 +2256,7 @@ function dibujarTira() {
   tira.scrollLeft = 0;
   marcarSeleccion();   // en modo edición, vuelve a pintar los pulsos elegidos (editor.js)
   pintarPartesEnTira();   // el color de la parte de cada pulso (partes.js)
+  pintarBucleEnTira();    // los compases del bucle A–B (practica.js)
 }
 
 // Tocar un casillero salta a ese pulso (sumando el ajuste, para que coincida).
@@ -2550,10 +2554,8 @@ diagramaDespues.addEventListener("click", () => cambiarPosicion(acordes[indiceAc
    Controles del reproductor
    ================================================================== */
 
-botonPlay.addEventListener("click", () => {
-  if (audio.paused) reproducirCancion();
-  else audio.pause();
-});
+// Play / pausa; con la cuenta "3, 2, 1" activada, primero cuenta un compás (practica.js).
+botonPlay.addEventListener("click", () => alternarReproduccion());
 
 audio.addEventListener("play", () => {
   botonPlay.textContent = "❚❚";
@@ -2638,67 +2640,96 @@ botonDespues.addEventListener("click", () => cambiarAjuste(+0.1));
    Pantalla completa (Fullscreen API)
 
    En el celular esconde la barra de direcciones de Chrome y la de
-   Android. Se sale con el mismo botón (que cambia de ícono) o con el
-   gesto de "atrás". Si el navegador no lo permite (Safari en iPhone),
-   el botón no aparece.
+   Android. El botón del encabezado ya no la activa sola: entra al "modo
+   tocar" (practica.js), que la usa junto con la pantalla fija acostada.
    ================================================================== */
 
 const botonPantallaCompleta = document.getElementById("boton-pantalla-completa");
 const hayPantallaCompleta = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
-botonPantallaCompleta.hidden = !hayPantallaCompleta;
 
 const elementoEnPantallaCompleta = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 
-botonPantallaCompleta.addEventListener("click", async () => {
-  try {
-    if (elementoEnPantallaCompleta()) {
-      await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
-    } else {
-      const raiz = document.documentElement;
-      await (raiz.requestFullscreen ? raiz.requestFullscreen({ navigationUI: "hide" }) : raiz.webkitRequestFullscreen());
-    }
-  } catch {
-    mostrarMensaje("El navegador no dejó usar la pantalla completa");
-  }
-});
+async function pedirPantallaCompleta() {
+  const raiz = document.documentElement;
+  await (raiz.requestFullscreen ? raiz.requestFullscreen({ navigationUI: "hide" }) : raiz.webkitRequestFullscreen());
+}
 
-// Al entrar o salir (también con "atrás"), el botón muestra la acción que corresponde.
+async function dejarPantallaCompleta() {
+  if (!elementoEnPantallaCompleta()) return;
+  await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
+}
+
+botonPantallaCompleta.addEventListener("click", () => alternarModoTocar());
+
 function mostrarPantallaCompleta() {
-  const activa = !!elementoEnPantallaCompleta();
-  document.body.classList.toggle("en-pantalla-completa", activa);
-  botonPantallaCompleta.setAttribute("aria-pressed", String(activa));
-  const texto = activa ? "Salir de pantalla completa" : "Pantalla completa";
-  botonPantallaCompleta.setAttribute("aria-label", texto);
-  botonPantallaCompleta.title = texto;
+  document.body.classList.toggle("en-pantalla-completa", !!elementoEnPantallaCompleta());
 }
 document.addEventListener("fullscreenchange", mostrarPantallaCompleta);
 document.addEventListener("webkitfullscreenchange", mostrarPantallaCompleta);
 mostrarPantallaCompleta();
 
 /* ==================================================================
-   Pantalla encendida mientras suena
+   Pantalla encendida mientras suena (Screen Wake Lock)
+
+   Se pide al dar play (y durante la cuenta "3, 2, 1") y se suelta en
+   pausa. El sistema lo suelta solo si la app pasa a segundo plano o si
+   ahorra batería: si eso pasa mientras suena, se vuelve a pedir.
    ================================================================== */
+
+const estadoPantalla = document.getElementById("estado-pantalla");
+let pidiendoPantalla = false;
+
+// ¿Tiene que seguir encendida? Mientras suena o mientras cuenta (practica.js).
+const quiereSonar = () => !audio.paused || cuentaEntrada !== null;
 
 // Pide al celular que no apague la pantalla. Solo funciona en navegadores
 // que lo soportan y en páginas seguras (https o localhost); si no, se ignora.
 async function pedirPantallaEncendida() {
+  if (!("wakeLock" in navigator) || pidiendoPantalla) return mostrarEstadoPantalla();
+  if (bloqueoPantalla && !bloqueoPantalla.released) return mostrarEstadoPantalla();
+  pidiendoPantalla = true;
   try {
-    if ("wakeLock" in navigator) {
-      bloqueoPantalla = await navigator.wakeLock.request("screen");
+    const bloqueo = await navigator.wakeLock.request("screen");
+    if (!quiereSonar()) {
+      bloqueo.release();          // se pausó mientras se pedía
+    } else {
+      bloqueoPantalla = bloqueo;
+      bloqueo.addEventListener("release", () => {
+        if (bloqueoPantalla === bloqueo) bloqueoPantalla = null;
+        mostrarEstadoPantalla();
+        // Lo soltó el sistema con la canción sonando: se pide de nuevo.
+        if (quiereSonar() && document.visibilityState === "visible") pedirPantallaEncendida();
+      });
     }
   } catch {
     // No es grave: la app funciona igual, solo que la pantalla puede apagarse.
+  } finally {
+    pidiendoPantalla = false;
   }
+  mostrarEstadoPantalla();
 }
 
 function soltarPantalla() {
-  if (bloqueoPantalla) bloqueoPantalla.release();
+  if (quiereSonar()) return;      // por ejemplo, la pausa de un instante al volver al inicio del bucle
+  const bloqueo = bloqueoPantalla;
   bloqueoPantalla = null;
+  if (bloqueo) bloqueo.release().catch(() => {});
+  mostrarEstadoPantalla();
 }
+
+// En el panel "Más": si la pantalla se queda encendida.
+function mostrarEstadoPantalla() {
+  if (!("wakeLock" in navigator)) {
+    estadoPantalla.textContent = window.isSecureContext ? "· Este navegador no puede dejar la pantalla encendida" : "";
+  } else {
+    estadoPantalla.textContent = bloqueoPantalla ? "· Pantalla encendida mientras suena ✓" : "· La pantalla se deja encendida al tocar";
+  }
+}
+mostrarEstadoPantalla();
 
 // Si salís de la app y volvés, el bloqueo se pierde: lo pedimos de nuevo.
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !audio.paused) {
+  if (document.visibilityState === "visible" && quiereSonar()) {
     pedirPantallaEncendida();
   }
 });

@@ -1679,13 +1679,13 @@ body {
   font-size: 1.05rem;
 }
 
-/* Una sola fila de controles: 0:00 · anterior · play · siguiente · metrónomo · Más */
+/* Una sola fila de controles: 0:00 · anterior · play · siguiente · metrónomo · A–B · Más */
 .reproductor {
   gap: 2px;
 }
 
 .transporte {
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 4px;
 }
 
@@ -1808,29 +1808,6 @@ body {
   flex: 1;
   height: auto;
   min-height: 0;
-}
-
-/* Botón de la orientación del mástil (en la barra de Tabs) */
-.boton-orientacion {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.boton-orientacion svg {
-  width: 18px;
-  height: 18px;
-  transition: transform 0.2s;
-  transform: rotate(90deg);   /* acostado */
-}
-
-.boton-orientacion[aria-pressed="true"] svg {
-  transform: none;             /* parado */
-}
-
-.boton-orientacion[aria-pressed="true"] {
-  border-color: var(--acento);
-  color: var(--acento);
 }
 
 /* Colores de las cuerdas en "Pistas y sync" */
@@ -2877,4 +2854,204 @@ body {
   border: 1px solid rgba(74, 222, 128, 0.5);
   background: rgba(74, 222, 128, 0.1);
   color: #86efac;
+}
+
+/* ==================================================================
+   Para practicar (practica.js): bucle A–B, cuenta "3, 2, 1", modo tocar
+   ================================================================== */
+
+/* Botón A–B: amarillo con el bucle armado, con borde mientras espera el final */
+.boton-bucle {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+.boton-bucle.esperando {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+/* Compases del bucle en la tira de Pulsos */
+.pulso.en-bucle {
+  box-shadow: inset 0 -5px 0 var(--acento);
+  background-image: linear-gradient(rgba(245, 184, 61, 0.14), rgba(245, 184, 61, 0.14));
+}
+
+/* El número grande de la cuenta, en el medio de la pantalla */
+.cuenta-entrada {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: min(42vw, 42vh);
+  font-weight: 900;
+  color: var(--acento);
+  text-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.cuenta-entrada[hidden] {
+  display: none;
+}
+
+.cuenta-entrada.latido {
+  animation: latido-cuenta 0.4s ease-out;
+}
+
+@keyframes latido-cuenta {
+  from { transform: scale(1.35); opacity: 0.4; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Versión de la app y estado de la pantalla, al pie del panel "Más" */
+.pie-opciones {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--texto-suave);
+  font-size: 0.78rem;
+}
+
+/* Aviso de girar el celular (modo tocar, si no se pudo fijar la orientación) */
+.aviso-girar {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: rgba(8, 10, 12, 0.94);
+  text-align: center;
+  font-size: 1.15rem;
+}
+
+.aviso-girar[hidden] {
+  display: none;
+}
+
+.aviso-girar svg {
+  width: 72px;
+  height: 72px;
+  color: var(--acento);
+  animation: girar-celular 1.8s ease-in-out infinite;
+}
+
+@keyframes girar-celular {
+  0%, 25% { transform: rotate(0); }
+  60%, 100% { transform: rotate(-90deg); }
+}
+
+.salir-modo-tocar {
+  display: none;
+}
+
+/* ---------- Modo tocar: sin encabezado ni barras, todo para el mástil ---------- */
+body.modo-tocar {
+  padding: 4px 6px calc(4px + env(safe-area-inset-bottom));
+}
+
+body.modo-tocar #pantalla-reproductor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 100%;
+}
+
+body.modo-tocar #pantalla-reproductor[hidden] {
+  display: none;
+}
+
+body.modo-tocar .encabezado,
+body.modo-tocar .fila-vista,
+body.modo-tocar .indicador-acordes,
+body.modo-tocar .barra-grilla,
+body.modo-tocar .vista-tabs .aviso-pulsos:empty {
+  display: none;
+}
+
+/* La vista Tabs: un renglón de tablatura arriba y el mástil grande abajo */
+body.modo-tocar .vista-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 4px;
+}
+
+body.modo-tocar .vista-tabs[hidden] {
+  display: none;
+}
+
+body.modo-tocar .caja-tabs {
+  flex: none;
+  height: clamp(84px, 30vh, 170px);
+  padding-top: 12px;              /* que no se corten los números de compás */
+  overflow-x: auto;
+  overflow-y: auto;
+}
+
+body.modo-tocar .mastil {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+}
+
+body.modo-tocar .vista-pulsos {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Los controles flotan abajo y se esconden solos */
+body.modo-tocar .reproductor {
+  position: fixed;
+  left: 6px;
+  right: 6px;
+  bottom: calc(4px + env(safe-area-inset-bottom));
+  z-index: 40;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(14, 17, 21, 0.92);
+  box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+body.modo-tocar .transporte {
+  display: flex;
+  flex: none;
+  order: -1;
+}
+
+body.modo-tocar .salir-modo-tocar {
+  display: block;
+  position: fixed;
+  top: 6px;
+  right: 8px;
+  z-index: 41;
+  min-height: 32px;
+  background: rgba(14, 17, 21, 0.92);
+  transition: opacity 0.3s;
+}
+
+body.modo-tocar.controles-ocultos .reproductor {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+body.modo-tocar.controles-ocultos .salir-modo-tocar {
+  opacity: 0;
+  pointer-events: none;
 }

@@ -288,7 +288,8 @@ function crearApiTabs() {
     },
     display: {
       staveProfile: alphaTab.StaveProfile.Tab,   // solo tablatura (sin pentagrama)
-      layoutMode: alphaTab.LayoutMode.Page,
+      // En el modo tocar, un solo renglón que corre de costado (practica.js)
+      layoutMode: modoTocar ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page,
       scale: zoomTabs,                           // más chica que antes; se cambia con − y +
       resources: {
         mainGlyphColor: "#f2f4f6",
@@ -307,8 +308,10 @@ function crearApiTabs() {
       scrollMode: alphaTab.ScrollMode.Continuous,
       scrollElement: cajaTabs,
       scrollOffsetY: margenCursor(),
+      scrollOffsetX: modoTocar ? DESPLAZAMIENTO_TOCAR : 0,
     },
   });
+  conectarBucleConTabs();   // tocar dos compases arma el bucle A–B (practica.js)
 
   apiTabs.scoreLoaded.on(alCargarPartitura);
   apiTabs.renderFinished.on(() => {
@@ -399,9 +402,11 @@ function pintarPistas(partitura) {
   });
 }
 
+// Las dos guitarras; en el modo tocar, solo la Guitarra 1 (un renglón).
 function dibujarPistas() {
   const partitura = apiTabs.score;
-  const pistas = pistasElegidas.filter((i) => i >= 0).map((i) => partitura.tracks[i]);
+  const elegidas = modoTocar ? pistasElegidas.slice(0, 1) : pistasElegidas;
+  const pistas = elegidas.filter((i) => i >= 0).map((i) => partitura.tracks[i]).filter(Boolean);
   if (pistas.length) apiTabs.renderTracks(pistas);
 }
 

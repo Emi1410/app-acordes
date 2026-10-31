@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=3.3">
+  <link rel="stylesheet" href="style.css?v=3.4">
 </head>
 <body>
 
@@ -136,9 +136,9 @@
         <small id="posicion-lista" class="posicion-lista"></small>
       </div>
       <button id="boton-agregar-lista" class="boton boton-chico" type="button">+ Lista</button>
-      <!-- Pantalla completa (esconde la barra de Chrome en el celular). Tocar de nuevo, o "atrás", la deja. -->
+      <!-- Modo tocar: pantalla completa, celular acostado, mástil grande y un renglón de tablatura (practica.js) -->
       <button id="boton-pantalla-completa" class="boton boton-chico boton-pantalla-completa" type="button"
-              aria-label="Pantalla completa" title="Pantalla completa" hidden>
+              aria-label="Modo tocar" title="Modo tocar">
         <svg class="icono-agrandar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <svg class="icono-achicar" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -162,10 +162,6 @@
           <output id="valor-zoom">70 %</output>
           <button id="zoom-mas" class="boton boton-chico" type="button" aria-label="Agrandar la tablatura">+</button>
         </div>
-        <!-- Mástil acostado (con la tablatura) o parado (para tocar); se recuerda -->
-        <button id="orientacion-mastil" class="boton boton-chico boton-orientacion" type="button" aria-pressed="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="16" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 18v4M7 22h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 7h6M9 11h6" stroke="currentColor" stroke-width="1.5"/></svg>
-        </button>
         <button id="boton-panel-tabs" class="boton boton-chico" type="button">Pistas y sync</button>
       </div>
     </div>
@@ -291,6 +287,9 @@
                 aria-label="Metrónomo" aria-pressed="false" title="Metrónomo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l4 18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 16 17 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.8"/></svg>
         </button>
+        <!-- Bucle A–B: marca el compás de inicio, después el final, y repite (practica.js) -->
+        <button id="boton-bucle" class="boton boton-icono boton-bucle" type="button"
+                aria-label="Bucle A–B: marcar el inicio" aria-pressed="false" title="Bucle A–B">A–B</button>
         <!-- Panel de opciones (velocidad, ajuste, volúmenes...), con un resumen (x1.25) -->
         <button id="boton-mas" class="boton boton-icono boton-mas" type="button" aria-label="Más opciones">
           <span>Más</span>
@@ -311,7 +310,20 @@
 
     <!-- Grilla por vueltas: un casillero por compás, un renglón por vuelta (grilla.js) -->
     <div id="lista" class="grilla-vueltas"></div>
+
+    <!-- Modo tocar: botón para salir (se esconde con los controles) -->
+    <button id="salir-modo-tocar" class="boton boton-chico salir-modo-tocar" type="button" hidden>✕ Salir</button>
   </section>
+
+  <!-- Cuenta "3, 2, 1" antes de tocar: el número grande en el medio -->
+  <div id="cuenta-entrada" class="cuenta-entrada" aria-live="assertive" hidden></div>
+
+  <!-- Modo tocar: si el celular no deja fijar la pantalla acostada, se pide girarlo -->
+  <div id="aviso-girar" class="aviso-girar" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 15a9 9 0 0 0 6 6M21 9a9 9 0 0 0-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <p>Girá el celular para tocar con el mástil acostado</p>
+    <button id="seguir-sin-girar" class="boton boton-chico" type="button">Seguir así</button>
+  </div>
 
   <!-- ==============================================================
        Capa de progreso: tapa la pantalla mientras se analiza un mp3
@@ -431,7 +443,20 @@
           <input type="checkbox" id="reproduccion-continua">
           <span>Reproducción continua <small>(sigue con la próxima)</small></span>
         </label>
+
+        <!-- Antes de arrancar (y en cada vuelta del bucle A–B), un compás de metrónomo -->
+        <label class="interruptor">
+          <input type="checkbox" id="cuenta-previa">
+          <span>Cuenta “3, 2, 1” <small>(un compás antes de tocar)</small></span>
+        </label>
       </div>
+
+      <!-- Para saber en el celular si cargó la última versión -->
+      <p class="pie-opciones">
+        <span id="version-app">Versión</span>
+        <button id="boton-actualizar" class="boton-lista boton-renombrar" type="button" hidden>Actualizar</button>
+        <span id="estado-pantalla"></span>
+      </p>
 
       <button id="boton-cerrar-opciones" class="boton boton-principal" type="button">Listo</button>
     </div>
@@ -503,6 +528,14 @@
         <input type="color" class="color-cuerda" data-cuerda="1" aria-label="Color de la 1ª cuerda" title="1ª">
         <button id="colores-originales" class="boton-lista boton-renombrar" type="button">Originales</button>
       </div>
+      <!-- Acostado debajo de la tablatura, o parado ocupando toda la vista (se recuerda) -->
+      <label class="fila-opcion">
+        <span>Mástil</span>
+        <select id="orientacion-mastil">
+          <option value="horizontal">Acostado, con la tablatura</option>
+          <option value="vertical">Parado, a pantalla completa</option>
+        </select>
+      </label>
       <label class="interruptor">
         <input type="checkbox" id="mastil-efectos-reducidos">
         <span>Efectos reducidos <small>(si el celular anda lento)</small></span>
@@ -617,23 +650,24 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=3.3"></script>
-  <script src="acordes.js?v=3.3"></script>
-  <script src="diagrama.js?v=3.3"></script>
-  <script src="biblioteca.js?v=3.3"></script>
-  <script src="analizador.js?v=3.3"></script>
-  <script src="app.js?v=3.3"></script>
-  <script src="editor.js?v=3.3"></script>
+  <script src="acordes-extra.js?v=3.4"></script>
+  <script src="acordes.js?v=3.4"></script>
+  <script src="diagrama.js?v=3.4"></script>
+  <script src="biblioteca.js?v=3.4"></script>
+  <script src="analizador.js?v=3.4"></script>
+  <script src="app.js?v=3.4"></script>
+  <script src="editor.js?v=3.4"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=3.3"></script>
-  <script src="mastil.js?v=3.3"></script>
-  <script src="sincronizar-solo.js?v=3.3"></script>
+  <script src="tablaturas.js?v=3.4"></script>
+  <script src="mastil.js?v=3.4"></script>
+  <script src="sincronizar-solo.js?v=3.4"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=3.3"></script>
+  <script src="acordes-tablatura.js?v=3.4"></script>
   <!-- Grilla por vueltas y partes de la canción -->
-  <script src="grilla.js?v=3.3"></script>
-  <script src="partes.js?v=3.3"></script>
+  <script src="grilla.js?v=3.4"></script>
+  <script src="partes.js?v=3.4"></script>
   <!-- Canciones desde archivos de Guitar Pro con el audio adentro -->
-  <script src="guitar-pro.js?v=3.3"></script>
+  <script src="guitar-pro.js?v=3.4"></script>
+  <script src="practica.js?v=3.4"></script>
 </body>
 </html>
