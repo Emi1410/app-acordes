@@ -1783,84 +1783,77 @@ body {
 }
 
 /* ------------------------------------------------------------------
-   Mástil virtual (vista Tabs)
+   Mástil virtual (vista Tabs): un <canvas> que dibuja mastil.js
    ------------------------------------------------------------------ */
+
+/* Acostado (por defecto): debajo de la tablatura, con un alto fijo */
 .mastil {
   flex: none;
+  height: 128px;
   border-radius: 10px;
   background: #0b0d10;
   overflow: hidden;
 }
 
-.svg-mastil {
+.lienzo-mastil {
   display: block;
-  width: 100%;
+}
+
+/* Parado: el mástil ocupa casi todo y la tablatura queda en una franja chica arriba */
+.vista-tabs.mastil-vertical .caja-tabs {
+  flex: none;
+  height: 92px;
+}
+
+.vista-tabs.mastil-vertical .mastil {
+  flex: 1;
   height: auto;
+  min-height: 0;
 }
 
-/* El tramo de trastes se corre suavemente cuando cambia de zona */
-.mastil-movil {
-  transition: transform 0.35s ease;
+/* Botón de la orientación del mástil (en la barra de Tabs) */
+.boton-orientacion {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.mastil-madera {
-  fill: #1a1612;
+.boton-orientacion svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s;
+  transform: rotate(90deg);   /* acostado */
 }
 
-.mastil-marca {
-  fill: #4a4036;
+.boton-orientacion[aria-pressed="true"] svg {
+  transform: none;             /* parado */
 }
 
-.mastil-traste {
-  stroke: #6b747e;
-  stroke-width: 1.2;
+.boton-orientacion[aria-pressed="true"] {
+  border-color: var(--acento);
+  color: var(--acento);
 }
 
-.mastil-cejuela {
-  stroke: #d8d2c4;
-  stroke-width: 4;
+/* Colores de las cuerdas en "Pistas y sync" */
+.colores-cuerdas {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--texto-suave);
 }
 
-.mastil-cuerda {
-  stroke: #9aa4ae;
+.colores-cuerdas span {
+  flex: 1;
 }
 
-.mastil-cuerda-nombre,
-.mastil-numero {
-  fill: var(--texto-suave);
-  font-size: 10px;
-  font-weight: 600;
-  dominant-baseline: central;
-}
-
-.mastil-cuerda-nombre {
-  text-anchor: end;
-}
-
-.mastil-numero {
-  text-anchor: middle;
-}
-
-/* Notas que suenan: Guitarra 1 en amarillo y Guitarra 2 en celeste */
-/* El borde oscuro separa el punto de la cuerda que pasa por debajo */
-.mastil-nota-1 {
-  fill: #f5b83d;
-  stroke: #0b0d10;
-  stroke-width: 1.4;
-}
-
-.mastil-nota-2 {
-  fill: #7fd6f7;
-  stroke: #0b0d10;
-  stroke-width: 1.4;
-}
-
-.mastil-nota-texto {
-  fill: #0b0d10;
-  font-size: 9px;
-  font-weight: 800;
-  text-anchor: middle;
-  dominant-baseline: central;
+.color-cuerda {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
 }
 
 /* Lista de puntos de sincronización (con la confianza de los automáticos) */
@@ -2545,6 +2538,15 @@ body {
     grid-column: 2;
     grid-row: 2;
     align-self: center;
+  }
+
+  /* Mástil parado en el celular acostado: la columna de la derecha entera */
+  .vista-tabs.mastil-vertical .caja-tabs {
+    height: auto;
+  }
+
+  .vista-tabs.mastil-vertical .mastil {
+    align-self: stretch;
   }
 
   /* Grilla: el acorde que suena a la izquierda, las vueltas a la derecha */

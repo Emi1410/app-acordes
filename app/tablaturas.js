@@ -449,6 +449,7 @@ function aplicarSyncTabs() {
   if (!apiTabs || !apiTabs.score || !tiemposPartitura.length) return;
   apiTabs.score.applyFlatSyncPoints(puntosParaAlphaTab());
   apiTabs.updateSyncPoints();
+  prepararMapaMastil();   // el mástil sigue la misma sincronización (mastil.js)
   actualizarTabs();
 }
 
