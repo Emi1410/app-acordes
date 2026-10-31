@@ -2114,8 +2114,11 @@ function actualizarTira(t) {
   celda.classList.add("actual");
 
   // El pulso actual queda a un tercio del borde izquierdo: se ve lo que viene.
+  // Suave mientras avanza; si es un salto lejano (más de dos pantallas), directo.
   if (!vistaPulsos.hidden) {
-    tira.scrollTo({ left: celda.offsetLeft - tira.clientWidth / 3, behavior: "smooth" });
+    const destino = celda.offsetLeft - tira.clientWidth / 3;
+    const lejos = Math.abs(destino - tira.scrollLeft) > 2 * tira.clientWidth;
+    tira.scrollTo({ left: destino, behavior: lejos ? "auto" : "smooth" });
   }
 }
 

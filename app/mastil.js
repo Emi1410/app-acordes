@@ -3,33 +3,43 @@
 /* ==================================================================
    Mástil virtual (vista Tabs): una Les Paul que toca sola
 
-   Debajo de la tablatura (horizontal) o parado ocupando casi toda la
-   pantalla (vertical), un mástil como el de una Les Paul (Eko LS-300):
-   diapasón de palisandro con veta, incrustaciones trapezoidales color
-   perla, filete crema en los bordes, trastes de níquel y, al final, una
-   franja del cuerpo cherry sunburst flameado con un humbucker (donde se
-   pulsa la cuerda).
+   Un mástil como el de una Les Paul (Eko LS-300): diapasón de palisandro
+   con veta, trastes de níquel con la separación real (cada vez más juntos
+   hacia el cuerpo), incrustaciones trapezoidales nacaradas, filete crema,
+   cejuela de hueso y, al pie, un poco del cuerpo cherry sunburst con un
+   humbucker chico (donde se pulsa la cuerda).
 
-   Cada cuerda tiene su color (configurable). Las notas son círculos del
-   color de su cuerda con el número de traste (o el nombre de la nota)
-   adentro. Como en Guitar Hero, las que vienen se ven tenues un instante
-   antes y se encienden al sonar; la cuerda que suena se ilumina desde el
-   dedo hasta el micrófono y vibra. Técnicas leídas nota por nota del .gp:
+   Dos modos (botón en la barra de Tabs, se recuerda):
+     - acostado: debajo de la tablatura, para leerla;
+     - parado (pantalla completa): sin la tablatura, el mástil ocupa toda
+       la vista para tocar siguiendo las notas. Con el celular vertical se
+       dibuja parado (clavijero arriba); acostado, a lo largo de la pantalla.
+   Si entra completo (en la compu) se ve entero; si no, el tramo visible
+   sigue a las notas, suave y anticipándose a las que vienen.
+
+   Qué guitarra se ve (se combinan las dos en una):
+     - si la Guitarra 1 toca (punteo o acordes), solo la Guitarra 1;
+     - si la Guitarra 1 no toca, los acordes de la Guitarra 2 (normales o
+       tenues, según la opción).
+
+   Las cuerdas que no suenan, grises; las que suenan se encienden con su
+   color (configurable) desde el dedo hasta el micrófono y vibran. Cada nota
+   es un círculo del color de su cuerda con el número de traste (o el nombre
+   de la nota). Como en Guitar Hero, las que vienen se ven tenues un instante
+   antes. Técnicas leídas nota por nota del .gp:
      - estirada (bend): la cuerda se curva hacia el costado según cuánto
        sube (½, full, 1½), con un arco y el valor; también la bajada
        (release) y las pre-estiradas, siguiendo los puntos del .gp;
-     - vibrato: la cuerda ondula mientras dura la nota;
-     - tapping: un golpe (un anillo que se abre) en el punto;
+     - vibrato: la cuerda ondula; tapping: un anillo que se abre;
      - hammer-on y pull-off: un arco entre las dos notas;
      - slide: el punto se desliza hasta el traste de llegada, con estela;
      - nota muteada: una X; armónico: un rombo.
-   La otra guitarra aparece más tenue (aunque en la tablatura se vea solo
-   la 1), para ver los acordes mientras se sigue el punteo.
 
-   Rendimiento: se dibuja en un <canvas>. Lo que no cambia (la madera, los
-   trastes, el clavijero, el cuerpo) se dibuja una sola vez en imágenes
-   aparte; en cada cuadro solo se copian y se dibujan las cuerdas y las
-   notas. Con "efectos reducidos" no hay brillo, vibración ni estelas.
+   Rendimiento: se dibuja en un <canvas>. La madera y los extremos se
+   dibujan una sola vez en imágenes aparte (ya giradas si el mástil está
+   parado); en cada cuadro solo se copian y se dibujan los trastes, las
+   incrustaciones, las cuerdas y las notas. Con "efectos reducidos" no hay
+   brillo, vibración ni estelas.
 
    Datos de alphaTab (ver tablaturas.js):
      - beat.absolutePlaybackStart / playbackDuration: cuándo suena (ticks);
@@ -42,7 +52,7 @@
 const contenedorMastil = document.getElementById("mastil");
 const botonOrientacionMastil = document.getElementById("orientacion-mastil");
 const selectorEtiquetaMastil = document.getElementById("etiqueta-mastil");
-const casillaOtraGuitarra = document.getElementById("mastil-otra-guitarra");
+const selectorAcordesOtra = document.getElementById("mastil-acordes-otra");
 const casillaEfectosReducidos = document.getElementById("mastil-efectos-reducidos");
 const entradasColorCuerda = [...document.querySelectorAll(".color-cuerda")];
 const botonColoresOriginales = document.getElementById("colores-originales");
@@ -51,22 +61,24 @@ const TRASTES_TOTALES = 22;                          // una Les Paul tiene 22
 const INCRUSTACIONES = [3, 5, 7, 9, 12, 15, 17, 19, 21];
 // Colores de las cuerdas, de la 6ª (la más grave) a la 1ª
 const COLORES_ORIGINALES = { 6: "#ef4444", 5: "#facc15", 4: "#3b82f6", 3: "#f97316", 2: "#22c55e", 1: "#a855f7" };
+const CUERDA_APAGADA = "#5c6268";                    // las que no suenan, en gris
 const ANTICIPO_MS = 650;          // cuánto antes de sonar aparece tenue una nota
 const ESPERA_VENTANA_MS = 4000;   // para mover el mástil se miran también las notas de los próximos ~2 compases
+const OPACIDAD_TENUE = 0.45;
 
 /* ------------------------------------------------------------------
    Preferencias (en este dispositivo)
    ------------------------------------------------------------------ */
 
-let orientacionMastil = "horizontal";   // "horizontal" | "vertical"
+let orientacionMastil = "horizontal";   // "horizontal" (acostado, con la tablatura) | "vertical" (parado, pantalla completa)
 let etiquetaMastil = "traste";          // "traste" | "nota"
-let mostrarOtraGuitarra = true;
+let acordesOtra = "normal";             // "normal" | "tenue": cómo se ven los acordes de la Guitarra 2
 let efectosReducidos = false;
 let coloresCuerda = { ...COLORES_ORIGINALES };
 try {
   if (localStorage.getItem("mastilOrientacion") === "vertical") orientacionMastil = "vertical";
   if (localStorage.getItem("mastilEtiqueta") === "nota") etiquetaMastil = "nota";
-  if (localStorage.getItem("mastilOtraGuitarra") === "no") mostrarOtraGuitarra = false;
+  if (localStorage.getItem("mastilAcordesOtra") === "tenue") acordesOtra = "tenue";
   if (localStorage.getItem("mastilEfectosReducidos") === "si") efectosReducidos = true;
   const guardados = JSON.parse(localStorage.getItem("mastilColores") || "null");
   if (guardados) for (const n of [1, 2, 3, 4, 5, 6]) if (/^#[0-9a-f]{6}$/i.test(guardados[n] || "")) coloresCuerda[n] = guardados[n];
@@ -82,15 +94,14 @@ function guardarPreferencia(clave, valor) {
    Datos: las notas de cada guitarra, con sus técnicas
    ------------------------------------------------------------------ */
 
-// [Guitarra principal, otra guitarra] = { nombre, afinacion, cuerdas, eventos: [{ inicio, fin (ms de la partitura), notas }] }
+// [Guitarra 1, Guitarra 2] = { nombre, afinacion, cuerdas, eventos: [{ inicio, fin (ms de la partitura), notas }] }
 let guitarrasMastil = [null, null];
 let mapaMastil = null;            // ms del mp3 -> ms de la partitura (con la sincronización)
 
 /**
  * Prepara las notas al cargar la partitura (y al cambiar las pistas).
- * La principal es la Guitarra 1; la otra, la Guitarra 2 elegida o, si en
- * la tablatura se ve solo la 1, otra guitarra de la canción (la de
- * acompañamiento, si la hay).
+ * La Guitarra 2 es la elegida en "Pistas y sync" o, si ahí se dejó solo la
+ * 1, otra guitarra de la canción (la de acompañamiento, si la hay).
  */
 function prepararMastil(partitura) {
   const msDeTick = crearMapaDeTempo(partitura);
@@ -185,54 +196,94 @@ function eventosEn(guitarra, desde, hasta = desde) {
   return resultado.reverse();
 }
 
+/**
+ * Qué se ve en el momento t: { eventos, proximas, opacidad, guitarra }.
+ * Manda la Guitarra 1: si toca (o tocó hace un instante, o va a tocar en
+ * un instante: los silencios cortos de un punteo no cuentan), se ve solo
+ * ella. Si no toca, se ven los acordes de la Guitarra 2.
+ */
+function queMostrar(t) {
+  const [g1, g2] = guitarrasMastil;
+  const suenan = (g) => eventosEn(g, t).filter((e) => e.inicio <= t && e.fin > t);
+  const vienen = (g) => eventosEn(g, t, t + ANTICIPO_MS).filter((e) => e.inicio > t);
+  const activa1 = eventosEn(g1, t - 400, t + 250).length > 0;
+  if (activa1 || !g2) return { eventos: suenan(g1), proximas: vienen(g1), opacidad: 1, guitarra: 1 };
+  return { eventos: suenan(g2), proximas: vienen(g2), opacidad: acordesOtra === "tenue" ? OPACIDAD_TENUE : 1, guitarra: 2 };
+}
+
 /* ------------------------------------------------------------------
    Medidas. Todo se piensa en "horizontal": a lo largo del mástil = x,
-   a lo ancho = y. En vertical se gira el dibujo 90° (clavijero arriba).
+   a lo ancho = y. Si el mástil se dibuja parado, se gira 90°.
    ------------------------------------------------------------------ */
 
 let medidasMastil = null;
 let lienzo = null, contexto2d = null;
-let imagenDiapason = null;        // los 22 trastes de madera (se corre como una cinta)
+let imagenMadera = null;          // el palisandro con su veta y el filete (fijo)
 let imagenMarco = null;           // clavijero, cejuela y cuerpo con el micrófono (fijos)
 let primerTrasteVisible = 0;      // el que se pide (entero)
 let desplazamientoActual = 0;     // el que se dibuja (se acerca de a poco: movimiento suave)
 let ultimoCuadro = 0;
 let cuadroPedido = false;
 
+// Distancia real de la cejuela al traste n, como fracción del largo de la
+// cuerda (cada traste achica la cuerda un 5,6 %: los trastes se juntan).
+const distanciaReal = (n) => 1 - Math.pow(2, -n / 12);
+
+/**
+ * Cuántos trastes entran a la vista: los más posibles con el traste más
+ * angosto (el último del tramo, con la separación real) de al menos
+ * "minimo" px. Si entran los 22, se ve el mástil entero y no se corre.
+ */
+function trastesQueEntran(zona, minimo) {
+  for (let k = TRASTES_TOTALES; k >= 4; k--) {
+    const angosto = (distanciaReal(k) - distanciaReal(k - 1)) / distanciaReal(k) * zona;
+    if (angosto >= minimo) return k;
+  }
+  return 4;
+}
+
 function calcularMedidas() {
-  const vertical = orientacionMastil === "vertical";
   const anchoCss = contenedorMastil.clientWidth || 340;
-  const altoCss = contenedorMastil.clientHeight || (vertical ? 500 : 128);
+  const altoCss = contenedorMastil.clientHeight || 150;
+  // Parado se dibuja a lo largo del lado más largo de la pantalla.
+  const vertical = orientacionMastil === "vertical" && altoCss > anchoCss;
   const largo = vertical ? altoCss : anchoCss;       // a lo largo del mástil
   const ancho = vertical ? anchoCss : altoCss;       // a lo ancho
-  const clavijero = Math.round(Math.min(34, Math.max(22, largo * 0.07)));
-  const aire = 22;
-  const cuerpo = Math.round(Math.min(84, Math.max(48, largo * 0.15)));
+  const clavijero = 28;
+  const aire = 24;
+  const cuerpo = orientacionMastil === "vertical" ? 30 : Math.round(Math.min(52, Math.max(34, largo * 0.07)));
   const zona = Math.max(80, largo - clavijero - aire - cuerpo);
-  const minimo = vertical ? 46 : 40;
-  const trastesVisibles = Math.max(4, Math.min(TRASTES_TOTALES, Math.floor(zona / minimo)));
-  const numeros = 16;                                // la fila de los números de traste
+  // Parado entran al menos 12 en un celular (los trastes son anchos a lo ancho del mástil).
+  const trastesVisibles = trastesQueEntran(zona, vertical ? 25 : 26);
+  const numeros = 17;                                // la fila de los números de traste
   const filete = 3;
-  const arriba = 6, abajo = ancho - numeros;         // el diapasón, a lo ancho
+  const arriba = 8, abajo = ancho - numeros;         // el diapasón, a lo ancho
   const cuerdas = (guitarrasMastil.find(Boolean) || { cuerdas: 6 }).cuerdas;
   const entreCuerdas = (abajo - arriba - 2 * filete) / cuerdas;
   return {
     vertical, anchoCss, altoCss, largo, ancho, clavijero, aire, cuerpo, zona, trastesVisibles,
-    anchoTraste: zona / trastesVisibles, numeros, filete, arriba, abajo, cuerdas, entreCuerdas,
-    xCejuela: clavijero + aire, xFinZona: clavijero + aire + zona, xMicrofono: largo - cuerpo * 0.45,
-    radio: Math.max(6.5, Math.min(13, entreCuerdas * 0.46)),
+    numeros, filete, arriba, abajo, cuerdas, entreCuerdas,
+    xCejuela: clavijero + aire, xFinZona: clavijero + aire + zona, xMicrofono: largo - cuerpo / 2,
+    // Parado, el círculo no puede pasar del ancho del traste más angosto.
+    radio: Math.max(8, Math.min(vertical ? 13 : 15, entreCuerdas * 0.5)),
     escala: window.devicePixelRatio || 1,
   };
 }
 
 const yDeCuerda = (m, fila) => m.arriba + m.filete + m.entreCuerdas * (fila + 0.5);
-// Centro del traste n en la pantalla, según cuánto está corrido el mástil (traste 0 = al aire).
-const xDeTraste = (m, traste) => (traste <= 0
-  ? m.clavijero + m.aire / 2
-  : m.xCejuela + (traste - 0.5 - desplazamientoActual) * m.anchoTraste);
+
+// Dónde está el alambre del traste n (puede ser fraccionario) con el tramo
+// visible que empieza en "desplazamientoActual": el tramo ocupa toda la zona.
+function xDeLinea(m, n) {
+  const a = distanciaReal(desplazamientoActual), b = distanciaReal(desplazamientoActual + m.trastesVisibles);
+  return m.xCejuela + (distanciaReal(n) - a) / (b - a) * m.zona;
+}
+
+// Dónde va el dedo en el traste n (un poco más cerca del alambre que del anterior); 0 = al aire.
+const xDeTraste = (m, traste) => (traste <= 0 ? m.clavijero + m.aire / 2 : xDeLinea(m, traste - 0.45));
 
 /* ------------------------------------------------------------------
-   Lo que no cambia: madera, trastes, incrustaciones, clavijero, cuerpo
+   Lo que no cambia: la madera, el clavijero, la cejuela, el cuerpo
    ------------------------------------------------------------------ */
 
 // Números pseudoaleatorios repetibles (la veta sale igual cada vez).
@@ -250,71 +301,38 @@ function crearLienzo(ancho, alto, escala) {
   return [c, g];
 }
 
-// El diapasón entero (22 trastes): palisandro con veta, incrustaciones, trastes y filete.
-function dibujarDiapason(m) {
-  const largo = TRASTES_TOTALES * m.anchoTraste;
-  const [c, g] = crearLienzo(largo, m.ancho, m.escala);
+// El palisandro (con veta) y el filete crema, del tamaño de la zona de trastes.
+function dibujarMadera(m) {
+  const [c, g] = crearLienzo(m.zona, m.ancho, m.escala);
   const alto = m.abajo - m.arriba;
-  // Palisandro: marrón oscuro, un poco más claro en el medio
   const madera = g.createLinearGradient(0, m.arriba, 0, m.abajo);
   madera.addColorStop(0, "#2a1810");
   madera.addColorStop(0.5, "#3d2417");
   madera.addColorStop(1, "#24140c");
   g.fillStyle = madera;
-  g.fillRect(0, m.arriba, largo, alto);
+  g.fillRect(0, m.arriba, m.zona, alto);
   // Veta: líneas finas a lo largo, un poco onduladas
   const azar = azarFijo(7);
-  for (let i = 0; i < 70; i++) {
+  for (let i = 0; i < 80; i++) {
     const y = m.arriba + azar() * alto;
     g.strokeStyle = azar() < 0.5 ? `rgba(20,10,5,${0.25 + azar() * 0.35})` : `rgba(120,70,40,${0.08 + azar() * 0.12})`;
     g.lineWidth = 0.4 + azar() * 1.2;
     g.beginPath();
     g.moveTo(0, y);
     const onda = 1 + azar() * 2.5, paso = 30 + azar() * 60, fase = azar() * 6;
-    for (let x = 0; x <= largo; x += 12) g.lineTo(x, y + Math.sin(x / paso + fase) * onda);
+    for (let x = 0; x <= m.zona; x += 12) g.lineTo(x, y + Math.sin(x / paso + fase) * onda);
     g.stroke();
-  }
-  // Incrustaciones trapezoidales color perla
-  for (const traste of INCRUSTACIONES) {
-    const centro = (traste - 0.5) * m.anchoTraste;
-    const anchoArriba = m.anchoTraste * 0.42, anchoAbajo = m.anchoTraste * 0.3;
-    const y0 = m.arriba + alto * 0.16, y1 = m.abajo - alto * 0.16;
-    const perla = g.createLinearGradient(centro - anchoArriba, y0, centro + anchoArriba, y1);
-    perla.addColorStop(0, "#f4efe3");
-    perla.addColorStop(0.35, "#d9e2e4");
-    perla.addColorStop(0.6, "#efe6d6");
-    perla.addColorStop(1, "#c9d3d6");
-    g.fillStyle = perla;
-    g.beginPath();
-    g.moveTo(centro - anchoArriba / 2, y0);
-    g.lineTo(centro + anchoArriba / 2, y0);
-    g.lineTo(centro + anchoAbajo / 2, y1);
-    g.lineTo(centro - anchoAbajo / 2, y1);
-    g.closePath();
-    g.fill();
-    g.strokeStyle = "rgba(80,60,40,0.5)";
-    g.lineWidth = 0.6;
-    g.stroke();
-  }
-  // Trastes de níquel: una franja con brillo en el centro
-  for (let traste = 1; traste <= TRASTES_TOTALES; traste++) {
-    const x = traste * m.anchoTraste;
-    const niquel = g.createLinearGradient(x - 1.6, 0, x + 1.6, 0);
-    niquel.addColorStop(0, "#6f7377");
-    niquel.addColorStop(0.5, "#eef1f2");
-    niquel.addColorStop(1, "#7d8286");
-    g.fillStyle = niquel;
-    g.fillRect(x - 1.6, m.arriba, 3.2, alto);
   }
   // Filete crema en los dos bordes
   g.fillStyle = "#efe2c0";
-  g.fillRect(0, m.arriba, largo, m.filete);
-  g.fillRect(0, m.abajo - m.filete, largo, m.filete);
+  g.fillRect(0, m.arriba, m.zona, m.filete);
+  g.fillRect(0, m.abajo - m.filete, m.zona, m.filete);
   return c;
 }
 
-// Lo fijo de los extremos: clavijero con sus clavijas, cejuela, y la franja
-// del cuerpo cherry sunburst flameado con el humbucker.
+// Los extremos: clavijero con sus clavijas, la columna de las cuerdas al
+// aire, la cejuela de hueso, y al pie un poco del cuerpo cherry sunburst
+// flameado con un humbucker chico.
 function dibujarMarco(m) {
   const [c, g] = crearLienzo(m.largo, m.ancho, m.escala);
   // Clavijero negro
@@ -322,66 +340,77 @@ function dibujarMarco(m) {
   clavijero.addColorStop(0, "#050505");
   clavijero.addColorStop(1, "#1c1c1c");
   g.fillStyle = clavijero;
-  redondeado(g, 0, m.arriba - 4, m.clavijero + 4, m.abajo - m.arriba + 8, 4);
+  redondeado(g, 0, m.arriba - 5, m.clavijero + 4, m.abajo - m.arriba + 10, 5);
   g.fill();
-  // Columna de las cuerdas al aire, entre el clavijero y la cejuela (madera)
+  // Columna de las cuerdas al aire (madera)
   g.fillStyle = "#2a1810";
   g.fillRect(m.clavijero, m.arriba, m.aire, m.abajo - m.arriba);
-  // Cejuela (hueso, color crema)
-  g.fillStyle = "#e9dfc6";
-  g.fillRect(m.xCejuela - 4, m.arriba, 4, m.abajo - m.arriba);
+  // Cejuela de hueso: marfil con un poco de brillo
+  const hueso = g.createLinearGradient(m.xCejuela - 5, 0, m.xCejuela, 0);
+  hueso.addColorStop(0, "#d9cba5");
+  hueso.addColorStop(0.5, "#f6eedb");
+  hueso.addColorStop(1, "#cbbd96");
+  g.fillStyle = hueso;
+  g.fillRect(m.xCejuela - 5, m.arriba - 1, 5, m.abajo - m.arriba + 2);
+  // Clavijas: botones nacarados arriba y abajo del clavijero
+  g.fillStyle = "#e8e2d2";
+  for (let i = 0; i < 3; i++) {
+    const x = 6 + i * (m.clavijero - 10) / 2;
+    g.beginPath(); g.arc(x, m.arriba - 2, 2.6, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(x, m.abajo + 2, 2.6, 0, Math.PI * 2); g.fill();
+  }
 
-  // Cuerpo: cherry sunburst (rojo oscuro en los bordes, ámbar en el centro) con flama
+  // Cuerpo: cherry sunburst con flama (solo una franja, como referencia)
   const x0 = m.xFinZona;
   const medio = (m.arriba + m.abajo) / 2;
-  const cuerpo = g.createRadialGradient(x0 + m.cuerpo * 0.55, medio, 4, x0 + m.cuerpo * 0.55, medio, Math.max(m.cuerpo, m.ancho));
+  const cuerpo = g.createRadialGradient(x0 + m.cuerpo * 0.6, medio, 2, x0 + m.cuerpo * 0.6, medio, Math.max(m.cuerpo * 1.5, m.ancho * 0.8));
   cuerpo.addColorStop(0, "#f2b13a");
   cuerpo.addColorStop(0.35, "#d8661b");
   cuerpo.addColorStop(0.7, "#8e1414");
   cuerpo.addColorStop(1, "#3a0505");
   g.fillStyle = cuerpo;
   g.fillRect(x0, 0, m.cuerpo, m.ancho);
-  // Flama del arce: franjas onduladas claras y oscuras a lo ancho
   const azar = azarFijo(19);
-  for (let i = 0; i < 26; i++) {
+  for (let i = 0; i < 14; i++) {
     const x = x0 + azar() * m.cuerpo;
     g.strokeStyle = azar() < 0.5 ? "rgba(255,220,150,0.16)" : "rgba(60,0,0,0.16)";
-    g.lineWidth = 1 + azar() * 3;
+    g.lineWidth = 1 + azar() * 2.5;
     g.beginPath();
     g.moveTo(x, 0);
-    for (let y = 0; y <= m.ancho; y += 8) g.lineTo(x + Math.sin(y / 9 + i) * 3, y);
+    for (let y = 0; y <= m.ancho; y += 8) g.lineTo(x + Math.sin(y / 9 + i) * 2.5, y);
     g.stroke();
   }
-  // El final del diapasón (con su filete) sobre el cuerpo
-  g.fillStyle = "#efe2c0";
-  g.fillRect(x0, m.arriba, 2, m.abajo - m.arriba);
-
-  // Humbucker: marco crema, dos bobinas negras con un tornillo por cuerda
-  const largoMic = Math.min(m.cuerpo * 0.62, 46);
+  // Humbucker chico: marco crema y dos bobinas negras con un tornillo por cuerda
+  const largoMic = Math.min(m.cuerpo * 0.7, 24);
   const xm = m.xMicrofono - largoMic / 2;
-  const ym = m.arriba + 1, altoMic = m.abajo - m.arriba - 2;
+  const ym = m.arriba + 2, altoMic = m.abajo - m.arriba - 4;
   g.fillStyle = "#e9dfc6";
-  redondeado(g, xm - 3, ym - 3, largoMic + 6, altoMic + 6, 4);
+  redondeado(g, xm - 2, ym - 2, largoMic + 4, altoMic + 4, 3);
   g.fill();
   for (let bobina = 0; bobina < 2; bobina++) {
-    const xb = xm + bobina * largoMic / 2 + 1.5;
+    const xb = xm + bobina * largoMic / 2 + 1;
     g.fillStyle = "#121212";
-    redondeado(g, xb, ym, largoMic / 2 - 3, altoMic, 3);
+    redondeado(g, xb, ym, largoMic / 2 - 2, altoMic, 2);
     g.fill();
     for (let fila = 0; fila < m.cuerdas; fila++) {
       g.fillStyle = bobina ? "#9aa0a6" : "#c8cdd2";
       g.beginPath();
-      g.arc(xb + (largoMic / 2 - 3) / 2, yDeCuerda(m, fila), Math.min(2.6, m.entreCuerdas * 0.18), 0, Math.PI * 2);
+      g.arc(xb + (largoMic / 2 - 2) / 2, yDeCuerda(m, fila), Math.min(2, m.entreCuerdas * 0.14), 0, Math.PI * 2);
       g.fill();
     }
   }
-  // Clavijas: botones nacarados arriba y abajo del clavijero
-  g.fillStyle = "#e8e2d2";
-  for (let i = 0; i < 3; i++) {
-    const x = 6 + i * (m.clavijero - 10) / 2;
-    g.beginPath(); g.arc(x, m.arriba - 1, 2.6, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.arc(x, m.abajo + 1, 2.6, 0, Math.PI * 2); g.fill();
-  }
+  return c;
+}
+
+// Gira una imagen 90° (para el mástil parado: lo que era "a lo largo" queda hacia abajo).
+function girarImagen(imagen) {
+  const c = document.createElement("canvas");
+  c.width = imagen.height;
+  c.height = imagen.width;
+  const g = c.getContext("2d");
+  g.translate(c.width, 0);
+  g.rotate(Math.PI / 2);
+  g.drawImage(imagen, 0, 0);
   return c;
 }
 
@@ -396,26 +425,14 @@ function redondeado(g, x, y, ancho, alto, r) {
   g.closePath();
 }
 
-// Gira una imagen 90° (para el mástil parado: lo que era "a lo largo" queda hacia abajo).
-function girarImagen(imagen, m) {
-  const c = document.createElement("canvas");
-  c.width = imagen.height;
-  c.height = imagen.width;
-  const g = c.getContext("2d");
-  g.translate(c.width, 0);
-  g.rotate(Math.PI / 2);
-  g.drawImage(imagen, 0, 0);
-  return c;
-}
-
 /* ------------------------------------------------------------------
-   Armar el lienzo (al cargar, al cambiar de tamaño o de orientación)
+   Armar el lienzo (al cargar, al cambiar de tamaño o de modo)
    ------------------------------------------------------------------ */
 
 function dibujarMastil() {
   const hay = guitarrasMastil.some(Boolean);
   contenedorMastil.hidden = !hay;
-  vistaTabs.classList.toggle("mastil-vertical", hay && orientacionMastil === "vertical");
+  vistaTabs.classList.toggle("mastil-parado", hay && orientacionMastil === "vertical");
   if (!hay) return;
   if (!lienzo) {
     lienzo = document.createElement("canvas");
@@ -433,18 +450,18 @@ function dibujarMastil() {
   lienzo.height = Math.round(m.altoCss * m.escala);
   lienzo.style.width = m.anchoCss + "px";
   lienzo.style.height = m.altoCss + "px";
-  // En vertical, las imágenes fijas se guardan ya giradas: copiarlas en cada
+  // Parado, las imágenes fijas se guardan ya giradas: copiarlas en cada
   // cuadro sin rotación es mucho más liviano (sobre todo sin aceleración gráfica).
-  imagenDiapason = m.vertical ? girarImagen(dibujarDiapason(m), m) : dibujarDiapason(m);
-  imagenMarco = m.vertical ? girarImagen(dibujarMarco(m), m) : dibujarMarco(m);
+  imagenMadera = m.vertical ? girarImagen(dibujarMadera(m)) : dibujarMadera(m);
+  imagenMarco = m.vertical ? girarImagen(dibujarMarco(m)) : dibujarMarco(m);
   primerTrasteVisible = Math.max(0, Math.min(primerTrasteVisible, TRASTES_TOTALES - m.trastesVisibles));
   desplazamientoActual = primerTrasteVisible;
-  contenedorMastil.dataset.orientacion = orientacionMastil;
+  contenedorMastil.dataset.dibujo = m.vertical ? "parado" : "acostado";
   contenedorMastil.dataset.trastesVisibles = m.trastesVisibles;
   pedirCuadro();
 }
 
-// Si cambia el tamaño (girar el celular, cambiar la orientación del mástil), se vuelve a armar.
+// Si cambia el tamaño (girar el celular, cambiar de modo), se vuelve a armar.
 new ResizeObserver(() => {
   if (!medidasMastil || !guitarrasMastil.some(Boolean) || contenedorMastil.hidden || vistaTabs.hidden) return;
   const ancho = contenedorMastil.clientWidth, alto = contenedorMastil.clientHeight;
@@ -505,83 +522,65 @@ function dibujarCuadro(marca) {
   ultimoCuadro = marca;
   const t = msPartituraAhora();
   const g = contexto2d;
-  const [principal, otra] = guitarrasMastil;
-  const otraVisible = mostrarOtraGuitarra ? otra : null;
-
-  // Qué suena ahora y qué viene
-  const suenan = (guitarra) => eventosEn(guitarra, t).filter((e) => e.inicio <= t && e.fin > t);
-  const ahoraPrincipal = suenan(principal), ahoraOtra = suenan(otraVisible);
-  const proximasPrincipal = eventosEn(principal, t, t + ANTICIPO_MS).filter((e) => e.inicio > t);
+  const visto = queMostrar(t);
 
   // Tramo visible (y su movimiento suave)
-  moverVentana(m, ahoraPrincipal.length ? ahoraPrincipal : ahoraOtra, t);
+  moverVentana(m, visto, t);
   let animando = false;
   if (Math.abs(desplazamientoActual - primerTrasteVisible) > 0.01) {
     desplazamientoActual = efectosReducidos || !dt ? primerTrasteVisible
-      : desplazamientoActual + (primerTrasteVisible - desplazamientoActual) * Math.min(1, dt * 9);
+      : desplazamientoActual + (primerTrasteVisible - desplazamientoActual) * Math.min(1, dt * 7);
     animando = true;
   } else {
     desplazamientoActual = primerTrasteVisible;
   }
 
-  // Madera (la cinta de 22 trastes, corrida) y el marco fijo: imágenes ya
-  // armadas (y ya giradas si el mástil está parado), copiadas sin rotar.
+  // Madera y extremos: imágenes ya armadas (y ya giradas si está parado), sin rotar.
   g.setTransform(m.escala, 0, 0, m.escala, 0, 0);
   g.clearRect(0, 0, m.anchoCss, m.altoCss);
-  const corrida = m.xCejuela - desplazamientoActual * m.anchoTraste;
-  g.save();
-  g.beginPath();
-  if (m.vertical) g.rect(0, m.xCejuela, m.anchoCss, m.zona); else g.rect(m.xCejuela, 0, m.zona, m.ancho);
-  g.clip();
-  if (m.vertical) g.drawImage(imagenDiapason, 0, corrida, imagenDiapason.width / m.escala, imagenDiapason.height / m.escala);
-  else g.drawImage(imagenDiapason, corrida, 0, imagenDiapason.width / m.escala, imagenDiapason.height / m.escala);
-  g.restore();
+  if (m.vertical) g.drawImage(imagenMadera, 0, m.xCejuela, m.anchoCss, m.zona);
+  else g.drawImage(imagenMadera, m.xCejuela, 0, m.zona, m.ancho);
   g.drawImage(imagenMarco, 0, 0, m.anchoCss, m.altoCss);
 
-  // El resto se dibuja en "horizontal"; en vertical se gira 90° (el clavijero queda arriba).
+  // El resto se dibuja en "horizontal"; parado se gira 90° (el clavijero queda arriba).
   if (m.vertical) { g.translate(m.anchoCss, 0); g.rotate(Math.PI / 2); }
+  dibujarTrastes(g, m);
 
   // Números de traste (derechos aunque el mástil esté parado) y nombres de las cuerdas
-  g.font = "600 10px system-ui, sans-serif";
+  g.font = "700 11px system-ui, sans-serif";
   g.fillStyle = "#9aa4ae";
-  for (let traste = Math.max(1, Math.floor(desplazamientoActual)); traste <= Math.min(TRASTES_TOTALES, Math.ceil(desplazamientoActual) + m.trastesVisibles); traste++) {
-    const x = xDeTraste(m, traste);
+  for (let traste = Math.max(1, Math.floor(desplazamientoActual) + 1); traste <= Math.min(TRASTES_TOTALES, Math.ceil(desplazamientoActual) + m.trastesVisibles); traste++) {
+    const x = (xDeLinea(m, traste - 1) + xDeLinea(m, traste)) / 2;
     if (x > m.xCejuela + 4 && x < m.xFinZona - 4) textoDerecho(g, m, String(traste), x, m.ancho - m.numeros / 2);
   }
   textoDerecho(g, m, "0", xDeTraste(m, 0), m.ancho - m.numeros / 2);
-  const deReferencia = principal || otra;
+  const deReferencia = guitarrasMastil.find(Boolean);
   const nombres = nombresDeNotas(tonalidadOriginal);
   g.fillStyle = "#d8d2c4";
   for (let fila = 0; fila < m.cuerdas; fila++) {
     textoDerecho(g, m, nombres[deReferencia.afinacion[fila] % 12], m.clavijero / 2 + 1, yDeCuerda(m, fila));
   }
 
-  // Cuerdas: quietas en metal; las que suenan, encendidas del dedo al micrófono y vibrando
-  const activas = new Map();   // fila -> { nota, evento, tenue }
-  for (const [eventos, tenue] of [[ahoraOtra, true], [ahoraPrincipal, false]]) {
-    for (const evento of eventos) {
-      for (const nota of evento.notas) {
-        if (!nota.muerta && (!activas.has(nota.fila) || !tenue)) activas.set(nota.fila, { nota, evento, tenue });
-      }
-    }
-  }
+  // Cuerdas: grises las que no suenan; las que suenan, encendidas del dedo al micrófono y vibrando
+  const activas = new Map();   // fila -> { nota, evento }
+  for (const evento of visto.eventos) for (const nota of evento.notas) if (!nota.muerta) activas.set(nota.fila, { nota, evento });
   for (let fila = 0; fila < m.cuerdas; fila++) {
-    if (dibujarCuerda(g, m, fila, activas.get(fila), t)) animando = true;
+    if (dibujarCuerda(g, m, fila, activas.get(fila), t, visto.opacidad)) animando = true;
   }
 
-  // Notas: las de la otra guitarra (tenues), las que vienen y las de la principal
-  for (const evento of ahoraOtra) for (const nota of evento.notas) dibujarNota(g, m, nota, evento, t, true, new Set());
-  for (const evento of proximasPrincipal) for (const nota of evento.notas) if (!nota.continua) dibujarProxima(g, m, nota, evento, t);
+  // Notas: las que vienen (tenues) y las que suenan
+  for (const evento of visto.proximas) for (const nota of evento.notas) if (!nota.continua) dibujarProxima(g, m, nota, evento, t);
   const tecnicas = new Set();
-  for (const evento of ahoraPrincipal) {
-    for (const nota of evento.notas) if (dibujarNota(g, m, nota, evento, t, false, tecnicas)) animando = true;
+  for (const evento of visto.eventos) {
+    for (const nota of evento.notas) if (dibujarNota(g, m, nota, evento, t, visto.opacidad, tecnicas)) animando = true;
   }
 
   // Lo que se ve, para las pruebas
   const describir = (eventos) => eventos.flatMap((e) => e.notas.map((n) => `${n.numero}ª/${n.traste}`)).join(" ");
-  contenedorMastil.dataset.sonando = describir(ahoraPrincipal);
-  contenedorMastil.dataset.otra = describir(ahoraOtra);
-  contenedorMastil.dataset.proximas = describir(proximasPrincipal);
+  contenedorMastil.dataset.guitarra = visto.eventos.length ? String(visto.guitarra) : "";
+  contenedorMastil.dataset.sonando = describir(visto.eventos);
+  contenedorMastil.dataset.proximas = describir(visto.proximas);
+  contenedorMastil.dataset.opacidad = String(visto.opacidad);
   contenedorMastil.dataset.tecnicas = [...tecnicas].join(" ");
   contenedorMastil.dataset.tramo = `${primerTrasteVisible + 1}-${primerTrasteVisible + m.trastesVisibles}`;
 
@@ -589,7 +588,59 @@ function dibujarCuadro(marca) {
   if (!audio.paused || (animando && !efectosReducidos)) pedirCuadro();
 }
 
-// Escribe un texto derecho: en vertical se contrarresta el giro del dibujo.
+// Los trastes de níquel (con la separación real) y las incrustaciones nacaradas del tramo visible.
+function dibujarTrastes(g, m) {
+  const desde = Math.floor(desplazamientoActual), hasta = Math.min(TRASTES_TOTALES, Math.ceil(desplazamientoActual + m.trastesVisibles));
+  const alto = m.abajo - m.arriba - 2 * m.filete;
+  const y0 = m.arriba + m.filete;
+  g.save();
+  g.beginPath();
+  g.rect(m.xCejuela, 0, m.zona, m.ancho);
+  g.clip();
+  // Incrustaciones: trapecios chicos, proporcionados al ancho del diapasón, con brillo nacarado
+  for (const traste of INCRUSTACIONES) {
+    if (traste <= desde || traste > hasta) continue;
+    const x0 = xDeLinea(m, traste - 1), x1 = xDeLinea(m, traste);
+    const centro = (x0 + x1) / 2, ancho = x1 - x0;
+    const largoMayor = Math.min(alto * 0.5, ancho * 0.36), largoMenor = largoMayor * 0.72;
+    const yA = y0 + alto * 0.22, yB = y0 + alto * 0.78;
+    const nacar = g.createLinearGradient(centro - largoMayor, yA, centro + largoMayor, yB);
+    nacar.addColorStop(0, "#efe9dc");
+    nacar.addColorStop(0.3, "#d6e5e8");
+    nacar.addColorStop(0.5, "#f3e4ec");
+    nacar.addColorStop(0.7, "#dfeee0");
+    nacar.addColorStop(1, "#e9e2d4");
+    g.globalAlpha = 0.88;
+    g.fillStyle = nacar;
+    g.beginPath();
+    g.moveTo(centro - largoMayor / 2, yA);
+    g.lineTo(centro + largoMayor / 2, yA);
+    g.lineTo(centro + largoMenor / 2, yB);
+    g.lineTo(centro - largoMenor / 2, yB);
+    g.closePath();
+    g.fill();
+    // un reflejo fino
+    g.globalAlpha = 0.5;
+    g.strokeStyle = "#ffffff";
+    g.lineWidth = 0.8;
+    g.beginPath();
+    g.moveTo(centro - largoMayor * 0.3, yA + 2);
+    g.lineTo(centro - largoMenor * 0.2, yB - 2);
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+  // Trastes: una franja oscura con el brillo del níquel en el medio
+  for (let traste = Math.max(1, desde); traste <= hasta; traste++) {
+    const x = xDeLinea(m, traste);
+    g.fillStyle = "#6c7176";
+    g.fillRect(x - 1.6, y0 - m.filete, 3.2, alto + 2 * m.filete);
+    g.fillStyle = "#e9edef";
+    g.fillRect(x - 0.6, y0 - m.filete, 1.2, alto + 2 * m.filete);
+  }
+  g.restore();
+}
+
+// Escribe un texto derecho: parado se contrarresta el giro del dibujo.
 function textoDerecho(g, m, texto, x, y) {
   g.save();
   g.translate(x, y);
@@ -600,10 +651,16 @@ function textoDerecho(g, m, texto, x, y) {
   g.restore();
 }
 
-// Mueve el tramo visible para que entren las notas que suenan (y, si se puede, las que vienen).
-function moverVentana(m, ahora, t) {
-  const pisados = ahora.flatMap((e) => e.notas.map((n) => Math.max(n.traste, n.slide ? n.slide.hasta : 0))).filter((x) => x > 0);
-  const proximos = eventosEn(guitarrasMastil[0], t, t + ESPERA_VENTANA_MS).filter((e) => e.inicio > t)
+/**
+ * Mueve el tramo visible para que entren las notas que suenan y, si se
+ * puede, las de los próximos segundos (así se adelanta a un cambio de
+ * zona). Si entra el mástil entero, no se mueve.
+ */
+function moverVentana(m, visto, t) {
+  if (m.trastesVisibles >= TRASTES_TOTALES) { primerTrasteVisible = 0; return; }
+  const guitarra = guitarrasMastil[visto.guitarra - 1];
+  const pisados = visto.eventos.flatMap((e) => e.notas.map((n) => Math.max(n.traste, n.slide ? n.slide.hasta : 0))).filter((x) => x > 0);
+  const proximos = eventosEn(guitarra, t, t + ESPERA_VENTANA_MS).filter((e) => e.inicio > t)
     .flatMap((e) => e.notas.map((n) => n.traste)).filter((x) => x > 0);
   const base = pisados.length ? pisados : proximos;
   if (!base.length) return;
@@ -620,47 +677,48 @@ function moverVentana(m, ahora, t) {
   primerTrasteVisible = Math.max(0, Math.min(TRASTES_TOTALES - m.trastesVisibles, nuevo));
 }
 
+// Grosor de cada cuerda: las graves bastante más gruesas que las agudas.
+const grosorCuerda = (m, fila) => 0.7 + (fila / Math.max(1, m.cuerdas - 1)) * 1.9;
+
 /**
- * Una cuerda. Si suena, del dedo al micrófono va encendida con su color y
- * vibrando (más al pulsarla, y ondulando si tiene vibrato); si se estira,
- * se curva hacia el costado en el dedo. Devuelve true si se mueve.
+ * Una cuerda. Si no suena, gris (apagada). Si suena, del dedo al micrófono
+ * va encendida con su color y vibrando (más al pulsarla, y ondulando si
+ * tiene vibrato); si se estira, se curva hacia el costado en el dedo.
+ * Devuelve true si se mueve.
  */
-function dibujarCuerda(g, m, fila, activa, t) {
+function dibujarCuerda(g, m, fila, activa, t, opacidad) {
   const y = yDeCuerda(m, fila);
-  const grosor = 0.8 + fila * 0.32;                         // las graves, más gruesas
-  const entorchada = fila >= m.cuerdas / 2;                 // las graves son entorchadas (bronce)
-  const quieta = entorchada ? "#a89270" : "#c3c7cb";
-  const xInicio = m.clavijero, xFin = m.largo - 6;
+  const grosor = grosorCuerda(m, fila);
+  const xInicio = m.clavijero - 2, xFin = m.largo - 4;
   if (!activa) {
-    g.strokeStyle = quieta;
+    g.strokeStyle = CUERDA_APAGADA;
     g.lineWidth = grosor;
     g.beginPath(); g.moveTo(xInicio, y); g.lineTo(xFin, y); g.stroke();
     return false;
   }
-  const { nota, evento, tenue } = activa;
+  const { nota, evento } = activa;
   const estado = estadoDeNota(nota, evento, t);
-  const xNota = xDeTraste(m, estado.traste);
-  const xDedo = estado.traste > 0 ? Math.max(m.xCejuela, Math.min(m.xFinZona, xNota + m.anchoTraste * 0.35)) : m.xCejuela;
+  const xDedo = estado.traste > 0 ? Math.max(m.xCejuela, Math.min(m.xFinZona, xDeLinea(m, estado.traste) - 2)) : m.xCejuela;
   const yDedo = y + corrimientoEstirada(m, fila, estado.semitonos);
   const color = colorDeCuerda(nota.numero);
-  // Del clavijero al dedo: metal (curvado si hay estirada)
-  g.strokeStyle = quieta;
+  // Del clavijero al dedo: gris (curvado si hay estirada)
+  g.strokeStyle = CUERDA_APAGADA;
   g.lineWidth = grosor;
   g.beginPath(); g.moveTo(xInicio, y); g.lineTo(xDedo, yDedo); g.stroke();
   // Del dedo al micrófono: encendida y vibrando
   const desdeAtaque = nota.continua ? 1e9 : t - evento.inicio;
-  const amplitud = efectosReducidos ? 0 : (tenue ? 1 : 2.4) * Math.exp(-Math.max(0, desdeAtaque) / 380);
+  const amplitud = efectosReducidos ? 0 : 2.6 * Math.exp(-Math.max(0, desdeAtaque) / 380);
   const vibrato = nota.vibrato && !efectosReducidos ? t : null;
   const fase = t / 1000 * 2 * Math.PI * 9;
   if (!efectosReducidos) {
     g.strokeStyle = color;
-    g.globalAlpha = tenue ? 0.12 : 0.3;
-    g.lineWidth = grosor + (tenue ? 3 : 6);
+    g.globalAlpha = 0.3 * opacidad;
+    g.lineWidth = grosor + 6;
     trazoCuerda(g, xDedo, yDedo, xFin, y, amplitud, fase, vibrato);
   }
-  g.globalAlpha = tenue ? 0.5 : 1;
+  g.globalAlpha = opacidad;
   g.strokeStyle = color;
-  g.lineWidth = grosor + (tenue ? 0.3 : 0.8);
+  g.lineWidth = grosor + 0.8;
   trazoCuerda(g, xDedo, yDedo, xFin, y, amplitud, fase, vibrato);
   g.globalAlpha = 1;
   return amplitud > 0.05 || vibrato !== null || !!nota.estirada || !!nota.slide;
@@ -693,17 +751,16 @@ function textoSobre(color) {
 /**
  * Una nota que suena: el círculo del color de su cuerda con el número de
  * traste (o el nombre), una X (muteada) o un rombo (armónico), y sus
- * técnicas. "tenue" para la otra guitarra. Devuelve true si algo se anima.
+ * técnicas. Devuelve true si algo se anima.
  */
-function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
+function dibujarNota(g, m, nota, evento, t, opacidad, tecnicas) {
   const estado = estadoDeNota(nota, evento, t);
   const x = xDeTraste(m, estado.traste);
-  if (estado.traste > 0 && (x < m.xCejuela - m.anchoTraste * 0.2 || x > m.xFinZona + m.anchoTraste * 0.2)) return false;
+  if (estado.traste > 0 && (x < m.xCejuela - 10 || x > m.xFinZona + 10)) return false;
   const yCuerda = yDeCuerda(m, nota.fila);
   const y = yCuerda + corrimientoEstirada(m, nota.fila, estado.semitonos);
   const color = colorDeCuerda(nota.numero);
-  const radio = tenue ? m.radio * 0.82 : m.radio;
-  const opacidad = tenue ? 0.42 : 1;
+  const radio = m.radio;
   let animada = false;
   g.globalAlpha = opacidad;
 
@@ -733,12 +790,12 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
     const xDestino = xDeTraste(m, nota.ligadoA.traste);
     const alto = Math.min(18, m.entreCuerdas * 0.9);
     g.strokeStyle = color;
-    g.lineWidth = 1.8;
+    g.lineWidth = 2;
     g.beginPath();
     g.moveTo(x, yCuerda - radio);
     g.quadraticCurveTo((x + xDestino) / 2, yCuerda - radio - alto, xDestino, yCuerda - radio);
     g.stroke();
-    g.font = "800 10px system-ui, sans-serif";
+    g.font = "800 11px system-ui, sans-serif";
     g.fillStyle = color;
     textoDerecho(g, m, sube ? "h" : "p", (x + xDestino) / 2, yCuerda - radio - alto * 0.9);
   }
@@ -758,13 +815,13 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
   }
 
   // Brillo alrededor del punto al pulsar
-  if (!tenue && !efectosReducidos && !nota.continua) {
+  if (!efectosReducidos && !nota.continua) {
     const desde = t - evento.inicio;
     if (desde < 450) {
       const brillo = g.createRadialGradient(x, y, radio * 0.6, x, y, radio * 2.2);
       brillo.addColorStop(0, color);
       brillo.addColorStop(1, "rgba(0,0,0,0)");
-      g.globalAlpha = 0.55 * (1 - desde / 450);
+      g.globalAlpha = 0.55 * opacidad * (1 - desde / 450);
       g.fillStyle = brillo;
       g.beginPath(); g.arc(x, y, radio * 2.2, 0, Math.PI * 2); g.fill();
       g.globalAlpha = opacidad;
@@ -776,7 +833,7 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
   if (nota.muerta) {
     tecnicas.add("muteada");
     g.strokeStyle = color;
-    g.lineWidth = 2.6;
+    g.lineWidth = 2.8;
     const r = radio * 0.75;
     g.beginPath();
     g.moveTo(x - r, y - r); g.lineTo(x + r, y + r);
@@ -785,7 +842,7 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
   } else {
     g.fillStyle = color;
     g.strokeStyle = "#0b0d10";
-    g.lineWidth = 1.4;
+    g.lineWidth = 1.5;
     g.beginPath();
     if (nota.armonico) {
       tecnicas.add("armonico");
@@ -800,7 +857,8 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
     const texto = etiquetaMastil === "nota"
       ? nombresDeNotas(tonalidadOriginal)[(nota.altura + Math.round(estado.semitonos)) % 12]
       : String(Math.round(estado.traste));
-    g.font = `800 ${Math.round(radio * (texto.length > 1 ? 1.05 : 1.25))}px system-ui, sans-serif`;
+    // Números grandes: casi todo el círculo (un poco menos si son dos cifras)
+    g.font = `800 ${Math.round(radio * (texto.length > 1 ? 1.2 : 1.45))}px system-ui, sans-serif`;
     g.fillStyle = textoSobre(color);
     textoDerecho(g, m, texto, x, y);
   }
@@ -813,7 +871,7 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
     const yTope = yCuerda + corrimientoEstirada(m, nota.fila, maximo);
     const xa = x + radio + 4;
     g.strokeStyle = "#f2f4f6";
-    g.lineWidth = 1.5;
+    g.lineWidth = 1.6;
     g.setLineDash([3, 2]);
     g.beginPath();
     g.moveTo(xa, yCuerda);
@@ -827,8 +885,8 @@ function dibujarNota(g, m, nota, evento, t, tenue, tecnicas) {
     g.lineTo(xa + 9, yTope - sentido * 5);
     g.closePath();
     g.fill();
-    g.font = "800 10px system-ui, sans-serif";
-    textoDerecho(g, m, textoEstirada(maximo), xa + 18, yTope);
+    g.font = "800 11px system-ui, sans-serif";
+    textoDerecho(g, m, textoEstirada(maximo), xa + 19, yTope);
     animada = true;
   }
   if (nota.vibrato) { tecnicas.add("vibrato"); animada = true; }
@@ -855,17 +913,17 @@ function dibujarProxima(g, m, nota, evento, t) {
 }
 
 /* ------------------------------------------------------------------
-   Opciones: orientación (botón en la barra de Tabs) y "Pistas y sync"
+   Opciones: modo (botón en la barra de Tabs) y "Pistas y sync"
    ------------------------------------------------------------------ */
 
 function mostrarOpcionesMastil() {
-  const vertical = orientacionMastil === "vertical";
-  botonOrientacionMastil.setAttribute("aria-pressed", String(vertical));
-  const texto = vertical ? "Mástil acostado (con la tablatura)" : "Mástil parado (para tocar)";
+  const parado = orientacionMastil === "vertical";
+  botonOrientacionMastil.setAttribute("aria-pressed", String(parado));
+  const texto = parado ? "Mástil acostado (con la tablatura)" : "Mástil parado a pantalla completa (para tocar)";
   botonOrientacionMastil.title = texto;
   botonOrientacionMastil.setAttribute("aria-label", texto);
   selectorEtiquetaMastil.value = etiquetaMastil;
-  casillaOtraGuitarra.checked = mostrarOtraGuitarra;
+  selectorAcordesOtra.value = acordesOtra;
   casillaEfectosReducidos.checked = efectosReducidos;
   for (const entrada of entradasColorCuerda) entrada.value = coloresCuerda[Number(entrada.dataset.cuerda)];
 }
@@ -875,8 +933,9 @@ botonOrientacionMastil.addEventListener("click", () => {
   guardarPreferencia("mastilOrientacion", orientacionMastil);
   mostrarOpcionesMastil();
   dibujarMastil();
-  // La tablatura cambió de tamaño: alphaTab vuelve a armar los renglones.
-  if (apiTabs && tabsListas) apiTabs.render();
+  // La tablatura vuelve a verse (o se oculta): alphaTab vuelve a armar los renglones.
+  if (apiTabs && tabsListas && orientacionMastil === "horizontal") apiTabs.render();
+  if (tabsListas && orientacionMastil === "vertical") mostrarAvisoTabs("");
 });
 
 selectorEtiquetaMastil.addEventListener("change", () => {
@@ -885,9 +944,9 @@ selectorEtiquetaMastil.addEventListener("change", () => {
   pedirCuadro();
 });
 
-casillaOtraGuitarra.addEventListener("change", () => {
-  mostrarOtraGuitarra = casillaOtraGuitarra.checked;
-  guardarPreferencia("mastilOtraGuitarra", mostrarOtraGuitarra ? "si" : "no");
+selectorAcordesOtra.addEventListener("change", () => {
+  acordesOtra = selectorAcordesOtra.value;
+  guardarPreferencia("mastilAcordesOtra", acordesOtra);
   pedirCuadro();
 });
 

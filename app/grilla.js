@@ -193,7 +193,18 @@ function dibujarCompas(k) {
     parte.dataset.pulso = trozo.desde;
     parte.style.flexGrow = trozo.pulsos;
     const nombre = document.createElement("b");
-    nombre.textContent = trozo.acorde === "N" ? "–" : nombreParaMostrar(trozo.acorde);
+    const texto = trozo.acorde === "N" ? "–" : nombreParaMostrar(trozo.acorde);
+    // El nombre se puede partir en dos renglones entre la raíz y el resto
+    // ("C#m" + "7b5", "G#" + "7sus4", "D" + "/F#"). El CSS elige el tamaño de
+    // letra según el ancho del casillero: el mayor entre que entre en un
+    // renglón o en dos (nunca se corta con "…").
+    const pedazos = pedazosDeNombre(texto);
+    pedazos.forEach((pedazo, i) => {
+      if (i) nombre.append(document.createElement("wbr"));
+      nombre.append(pedazo);
+    });
+    parte.style.setProperty("--letras", Math.max(2, texto.length));
+    parte.style.setProperty("--parte-larga", Math.max(2, ...pedazos.map((p) => p.length)));
     // Si sigue el acorde del compás anterior, se ve más apagado (como "%" en un cifrado).
     const anterior = n === 0 && k > 0 ? compasesGrilla[k - 1].trozos.at(-1) : null;
     if (anterior && anterior.acorde === trozo.acorde) parte.classList.add("sigue");
@@ -201,6 +212,16 @@ function dibujarCompas(k) {
     casillero.appendChild(parte);
   });
   return casillero;
+}
+
+// Dónde se puede partir el nombre de un acorde si no entra en un renglón:
+// después de la raíz y antes de "sus", "add", "maj", "dim", "aug" o el bajo.
+//   "G#7sus4" -> ["G#", "7", "sus4"], "C#m7b5" -> ["C#m", "7b5"], "D/F#" -> ["D", "/F#"]
+function pedazosDeNombre(texto) {
+  const raiz = /^[A-G][#b]?(m(?!aj))?/.exec(texto);
+  if (!raiz || raiz[0].length === texto.length) return [texto];
+  const resto = texto.slice(raiz[0].length).split(/(?=sus|add|maj|dim|aug|\/)/).filter(Boolean);
+  return [raiz[0], ...resto];
 }
 
 // Tocar un compás (o una de sus partes) salta a ese momento.

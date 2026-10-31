@@ -1789,7 +1789,7 @@ body {
 /* Acostado (por defecto): debajo de la tablatura, con un alto fijo */
 .mastil {
   flex: none;
-  height: 128px;
+  height: 150px;
   border-radius: 10px;
   background: #0b0d10;
   overflow: hidden;
@@ -1799,13 +1799,12 @@ body {
   display: block;
 }
 
-/* Parado: el mástil ocupa casi todo y la tablatura queda en una franja chica arriba */
-.vista-tabs.mastil-vertical .caja-tabs {
-  flex: none;
-  height: 92px;
+/* Parado: pantalla completa, sin la tablatura escrita */
+.vista-tabs.mastil-parado .caja-tabs {
+  display: none;
 }
 
-.vista-tabs.mastil-vertical .mastil {
+.vista-tabs.mastil-parado .mastil {
   flex: 1;
   height: auto;
   min-height: 0;
@@ -2540,12 +2539,17 @@ body {
     align-self: center;
   }
 
-  /* Mástil parado en el celular acostado: la columna de la derecha entera */
-  .vista-tabs.mastil-vertical .caja-tabs {
-    height: auto;
+  /* Mástil parado en el celular acostado: toda la vista, sin columnas (se
+     dibuja a lo largo de la pantalla, ver mastil.js) */
+  .vista-tabs.mastil-parado {
+    display: flex;
+    flex-direction: column;
   }
 
-  .vista-tabs.mastil-vertical .mastil {
+  .vista-tabs.mastil-parado .mastil {
+    flex: 1;
+    height: auto;
+    min-height: 0;
     align-self: stretch;
   }
 
@@ -2737,5 +2741,98 @@ body {
   #pantalla-reproductor.editando .barra-edicion {
     grid-row: 4;
     overflow-y: auto;
+  }
+}
+
+/* ==================================================================
+   Pulsos más grandes (como Chordify) y Grilla más grande
+   ================================================================== */
+
+/* Tira de pulsos: casilleros más altos y el nombre del acorde grande */
+.pulso {
+  width: 56px;
+  height: 70px;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+/* Grilla: el nombre de cada parte de un compás se achica si no entra
+   (nunca se corta con "…"). Cada parte mide su propio ancho (cqi). */
+.trozo {
+  container-type: inline-size;
+}
+
+.trozo b {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;                 /* parte solo donde está el <wbr> */
+  line-height: 1.05;
+  text-align: center;
+  font-size: min(1.7rem, max(calc(135cqi / var(--letras, 3)), calc(135cqi / var(--parte-larga, 3))));
+  font-weight: 800;
+}
+
+.compas-grilla {
+  min-height: 74px;
+}
+
+@media (max-width: 600px), (max-height: 500px) {
+  .pulso {
+    width: 52px;
+    height: 64px;
+    font-size: 1.5rem;
+  }
+
+  /* Que se vean tres vueltas de 4 compases a la vez, con casilleros grandes */
+  .compas-grilla {
+    min-height: clamp(64px, 11dvh, 104px);
+  }
+
+  .trozo b {
+    font-size: min(1.65rem, max(calc(135cqi / var(--letras, 3)), calc(135cqi / var(--parte-larga, 3))));
+  }
+
+  .vuelta {
+    gap: 5px;
+  }
+
+  /* Diagramas de la Grilla más grandes */
+  .acorde-actual {
+    font-size: 3rem;
+  }
+
+  .diagrama-actual .diagrama {
+    width: 100px;
+  }
+
+  .diagrama-siguiente .diagrama {
+    width: 68px;
+  }
+
+  .siguiente {
+    font-size: 1.15rem;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .pulso {
+    height: 56px;
+  }
+
+  .compas-grilla {
+    min-height: clamp(50px, 17dvh, 80px);
+  }
+
+  .acorde-actual {
+    font-size: 2.6rem;
+  }
+
+  .diagrama-actual .diagrama {
+    width: 92px;
+  }
+
+  .diagrama-siguiente .diagrama {
+    width: 56px;
   }
 }

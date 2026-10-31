@@ -122,6 +122,9 @@ function revisarTabsListas() {
   aplicarSyncTabs();
   if (!audio.paused) apiTabs.play();
   actualizarTabs();
+  // Con el mástil parado la tablatura escrita no se ve (y alphaTab no la
+  // termina de dibujar): el aviso "Cargando…" se saca acá.
+  if (vistaTabs.classList.contains("mastil-parado")) mostrarAvisoTabs("");
 }
 
 /* ------------------------------------------------------------------
