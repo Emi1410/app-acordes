@@ -163,18 +163,55 @@ inputTablatura.addEventListener("change", async () => {
     alert(`"${archivo.name}" no es un archivo de Guitar Pro (.gp, .gp5, .gpx o .gp4).`);
     return;
   }
+  const id = idActual;
+  panelOpciones.close();
+  // Un .gp de Guitar Pro 7/8 puede traer su audio y sus puntos de
+  // sincronización (guitar-pro.js): se ofrece usarlos. La tablatura se
+  // guarda siempre sin el audio adentro.
+  let info = null;
   try {
-    await guardarTablatura(idActual, archivo, archivo.name);
-    // Con un archivo nuevo, las pistas se vuelven a proponer (la sincronización se mantiene).
-    await actualizarCancion(idActual, { tabPistas: null });
-    cancionActual = { ...cancionActual, tabPistas: null };
+    capaProgreso.hidden = false;
+    barraProgreso.value = 0.1;
+    textoProgreso.textContent = "Leyendo el archivo de Guitar Pro…";
+    info = await leerGuitarPro(archivo);
+  } catch {
+    info = null;                       // se guarda tal cual, como antes
+  } finally {
+    capaProgreso.hidden = true;
+  }
+  const usarSync = !!(info && info.sync) && confirm(`Este .gp trae ${info.sync.puntos.length + 1} puntos de sincronización`
+    + (info.audio ? " y su propio audio" : "") + ".\n¿Usar sus puntos de sincronización?");
+  const usarAudio = !!(info && info.audio) && confirm("¿Reemplazar también el audio de la canción por el que trae el archivo?"
+    + (usarSync ? "" : "\n(Sus puntos de sincronización son de ese audio.)"));
+  try {
+    await guardarTablatura(id, info ? info.gp : archivo, archivo.name);
+    // Con un archivo nuevo, las pistas se vuelven a proponer.
+    const cambios = { tabPistas: null };
+    if (usarAudio) await reemplazarAudio(id, info.audio);
+    if (usarSync) {
+      // Los puntos tal cual vienen, con el corrimiento fijo corregido (comprobado con los ataques del audio).
+      const audio = usarAudio ? info.audio : await obtenerAudio(id);
+      capaProgreso.hidden = false;
+      const afinado = await afinarSincronizacion(info.partitura, info.sync, audio, (f, etapa) => {
+        barraProgreso.value = f;
+        textoProgreso.textContent = `Comprobando la sincronización con el audio… ${Math.round(f * 100)} %`;
+      });
+      capaProgreso.hidden = true;
+      cambios.tabSync = afinado.sync;
+    }
+    await actualizarCancion(id, cambios);
+    if (id === idActual) cancionActual = { ...cancionActual, ...cambios };
+    // Si ya tenía acordes sacados de la tablatura, se corren con la sincronización nueva.
+    if (cambios.tabSync) await reubicarAcordesTablatura(id, info.partitura, calcularTiemposPartitura(info.partitura), cambios.tabSync);
   } catch (error) {
+    capaProgreso.hidden = true;
     alert("No pude guardar la tablatura: " + error.message);
     return;
   }
-  panelOpciones.close();
   tabsDeCancion = null;                 // obliga a recargarla
-  mostrarMensaje("Tablatura guardada");
+  // Con otro audio, se vuelve a cargar la canción entera.
+  if (usarAudio && id === idActual) await cargarCancion(id);
+  mostrarMensaje(usarAudio ? "Tablatura y audio del .gp guardados" : usarSync ? "Tablatura guardada con su sincronización" : "Tablatura guardada");
   aplicarVista("tabs");
 });
 

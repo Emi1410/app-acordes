@@ -36,6 +36,11 @@ const inputMp3 = document.getElementById("input-mp3");
 const inputJson = document.getElementById("input-json");
 const nombreMp3 = document.getElementById("nombre-mp3");
 const nombreJson = document.getElementById("nombre-json");
+const inputGp = document.getElementById("input-gp");
+const nombreGp = document.getElementById("nombre-gp");
+const portadaAgregar = document.getElementById("portada-agregar");
+const ayudaAgregar = document.getElementById("ayuda-agregar");
+const TEXTO_AYUDA_AGREGAR = ayudaAgregar.textContent;
 const inputNombre = document.getElementById("input-nombre");
 const inputLista = document.getElementById("input-lista");
 const avisoAgregar = document.getElementById("aviso-agregar");
@@ -127,6 +132,7 @@ let bloqueoPantalla = null;
 // Lo elegido en "Agregar canción" hasta que se guarda.
 let mp3Elegido = null;      // el archivo mp3
 let datosElegidos = null;   // el JSON (opcional) ya leído y validado
+let gpElegido = null;       // el .gp de Guitar Pro ya leído (leerGuitarPro en guitar-pro.js)
 let nombrePropuesto = "";   // el último nombre que propuso la app (del mp3 o del JSON)
 
 // Posición elegida para cada acorde, por ejemplo { "G#": 1, "C#m": 0 }.
@@ -304,6 +310,13 @@ function actualizarSugerencias() {
 //
 // "etiquetas": chips de color junto al nombre, por ejemplo "Sin lista".
 // Las canciones sin analizar (agregadas de a muchas) llevan siempre "Sin analizar".
+// Las direcciones de las portadas se crean una sola vez por canción (no en cada dibujo de la lista).
+const portadasCreadas = new Map();
+function urlDePortada(id, imagen) {
+  if (!portadasCreadas.has(id)) portadasCreadas.set(id, URL.createObjectURL(imagen));
+  return portadasCreadas.get(id);
+}
+
 function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto = { tipo: "todas" }, manija = false, etiquetas = [] } = {}) {
   const item = document.createElement("li");
   item.className = "cancion";
@@ -322,13 +335,25 @@ function crearItemCancion(cancion, { detalleExtra = "", accion = null, contexto 
   const abrir = document.createElement("button");
   abrir.type = "button";
   abrir.className = "cancion-abrir";
+  // La portada (si el audio de un .gp traía una), chiquita a la izquierda.
+  if (cancion.portada instanceof Blob) {
+    const portada = document.createElement("img");
+    portada.className = "portada-cancion";
+    portada.alt = "";
+    portada.src = urlDePortada(cancion.id, cancion.portada);
+    item.appendChild(portada);
+  }
   const nombre = document.createElement("b");
   nombre.textContent = cancion.nombre;
   nombre.title = cancion.nombre;   // el nombre completo, por si se corta con "…"
   abrir.appendChild(nombre);
 
   // Etiquetas de color (sin analizar, sin lista...)
-  const chips = [...(cancion.pendiente ? [{ texto: "Sin analizar", clase: "etiqueta-pendiente" }] : []), ...etiquetas];
+  const chips = [
+    ...(cancion.pendiente ? [{ texto: "Sin analizar", clase: "etiqueta-pendiente" }] : []),
+    ...(cancion.origen === "guitarPro" ? [{ texto: "Guitar Pro", clase: "etiqueta-gp" }] : []),
+    ...etiquetas,
+  ];
   if (chips.length) {
     const fila = document.createElement("span");
     fila.className = "etiquetas";
@@ -666,11 +691,16 @@ botonAgregar.addEventListener("click", () => {
 function limpiarFormulario() {
   mp3Elegido = null;
   datosElegidos = null;
+  gpElegido = null;
   nombrePropuesto = "";
   inputMp3.value = "";
   inputJson.value = "";
+  inputGp.value = "";
   nombreMp3.textContent = "Ningún archivo";
   nombreJson.textContent = "Lo analiza el celu";
+  nombreGp.textContent = "Trae audio y sincronización";
+  ayudaAgregar.textContent = TEXTO_AYUDA_AGREGAR;
+  mostrarPortadaAgregar(null);
   inputNombre.value = "";
   inputLista.value = "";
   // Agregar varias
@@ -692,8 +722,62 @@ function mostrarAviso(texto) {
 // analizar en el celular o si usa el JSON de la compu.
 function revisarFormulario() {
   botonGuardar.disabled = !(mp3Elegido && inputNombre.value.trim());
-  botonGuardar.textContent = datosElegidos ? "Guardar canción" : "Analizar y guardar";
+  const desdeGp = gpElegido && gpElegido.audio && mp3Elegido === gpElegido.audio;
+  botonGuardar.textContent = datosElegidos || desdeGp ? "Guardar canción" : "Analizar y guardar";
 }
+
+// La portada que trae el audio del .gp (o nada).
+function mostrarPortadaAgregar(imagen) {
+  if (portadaAgregar.src) URL.revokeObjectURL(portadaAgregar.src);
+  portadaAgregar.removeAttribute("src");
+  portadaAgregar.hidden = !imagen;
+  if (imagen) portadaAgregar.src = URL.createObjectURL(imagen);
+}
+
+// Elegir un .gp: si trae el audio, la canción se arma con él (audio, tablatura,
+// sincronización y acordes); si no, se pide el mp3 aparte y la tablatura
+// queda guardada con la canción.
+inputGp.addEventListener("change", async () => {
+  const archivo = inputGp.files[0];
+  inputGp.value = "";
+  if (!archivo) return;
+  if (!EXTENSIONES_GUITAR_PRO.test(archivo.name)) {
+    mostrarAviso(`"${archivo.name}" no es un archivo de Guitar Pro (.gp, .gp5, .gpx o .gp4).`);
+    return;
+  }
+  capaProgreso.hidden = false;
+  barraProgreso.value = 0.1;
+  textoProgreso.textContent = "Leyendo el archivo de Guitar Pro…";
+  let info;
+  try {
+    info = await leerGuitarPro(archivo);
+  } catch (error) {
+    mostrarAviso(error.message);
+    return;
+  } finally {
+    capaProgreso.hidden = true;
+  }
+  gpElegido = info;
+  nombreGp.textContent = archivo.name;
+  proponerNombre(info.nombre);
+  mostrarPortadaAgregar(info.portada);
+  if (info.audio) {
+    // El audio de adentro pasa a ser el de la canción (si había un mp3 elegido, se reemplaza).
+    mp3Elegido = info.audio;
+    inputMp3.value = "";
+    nombreMp3.textContent = `Del .gp (${formatoTamano(info.audio.size)})`;
+    mostrarAviso("");
+    ayudaAgregar.textContent = info.sync
+      ? `Trae el audio y ${info.sync.puntos.length + 1} puntos de sincronización: los acordes, los compases y la sincronización salen de la tablatura.`
+      : "Trae el audio pero no puntos de sincronización: se guarda con la tablatura y se analiza al abrirla.";
+  } else {
+    if (mp3Elegido && gpElegido && mp3Elegido.name && !inputMp3.files[0]) mp3Elegido = null;
+    nombreMp3.textContent = mp3Elegido ? mp3Elegido.name : "Ningún archivo";
+    mostrarAviso("Este .gp no trae el audio adentro: elegí también el mp3 de la canción. La tablatura queda guardada con ella.");
+    ayudaAgregar.textContent = TEXTO_AYUDA_AGREGAR;
+  }
+  revisarFormulario();
+});
 
 // Propone un nombre, salvo que el usuario ya haya escrito uno propio.
 function proponerNombre(nombre) {
@@ -717,6 +801,13 @@ inputMp3.addEventListener("change", () => {
     mp3Elegido = archivo;
     nombreMp3.textContent = archivo.name;
     mostrarAviso("");
+    // Si había un .gp con su propio audio, se deja de lado: su sincronización era de ese audio.
+    if (gpElegido && gpElegido.audio) {
+      gpElegido = null;
+      nombreGp.textContent = "Trae audio y sincronización";
+      mostrarPortadaAgregar(null);
+      ayudaAgregar.textContent = TEXTO_AYUDA_AGREGAR;
+    }
     // Si no hay JSON, proponemos el nombre del archivo sin ".mp3".
     if (!datosElegidos) proponerNombre(archivo.name.replace(/\.[^.]+$/, ""));
   }
@@ -760,6 +851,33 @@ inputNombre.addEventListener("input", revisarFormulario);
 botonGuardar.addEventListener("click", async () => {
   botonGuardar.disabled = true;
 
+  // Un .gp con su audio: todo sale del archivo (sin analizar el mp3).
+  if (gpElegido && gpElegido.audio && mp3Elegido === gpElegido.audio) {
+    capaProgreso.hidden = false;
+    let resultado;
+    try {
+      resultado = await guardarCancionDesdeGuitarPro(gpElegido, inputNombre.value.trim(), inputLista.value, (fraccion, etapa) => {
+        barraProgreso.value = fraccion;
+        textoProgreso.textContent = `${etapa}… ${Math.round(fraccion * 100)} %`;
+      });
+    } catch (error) {
+      const sinEspacio = error && error.name === "QuotaExceededError";
+      mostrarAviso(sinEspacio ? "No hay espacio suficiente en el celular para guardar esta canción." : "No pude guardar la canción: " + error.message);
+      revisarFormulario();
+      return;
+    } finally {
+      capaProgreso.hidden = true;
+    }
+    await pedirPersistencia();
+    revisarFormulario();
+    volverABiblioteca();
+    const { afinado } = resultado;
+    mostrarMensaje(afinado && afinado.aplicado
+      ? `Guardada · sincronización del .gp corrida ${Math.round(afinado.corrimiento)} ms para que coincida con el audio`
+      : "Guardada con la sincronización del .gp");
+    return;
+  }
+
   // Sin JSON de la compu: analizamos el mp3 acá mismo.
   let datos = datosElegidos;
   if (!datos) {
@@ -778,7 +896,7 @@ botonGuardar.addEventListener("click", async () => {
 
   botonGuardar.textContent = "Guardando...";
   try {
-    await guardarCancion({
+    const id = await guardarCancion({
       nombre: inputNombre.value.trim(),
       tonalidad: typeof datos.tonalidad === "string" ? datos.tonalidad : "",
       tempo: datos.tempo || 0,
@@ -796,6 +914,8 @@ botonGuardar.addEventListener("click", async () => {
       tamanoMp3: mp3Elegido.size,
       agregada: Date.now(),
     }, mp3Elegido, inputLista.value);   // si hay lista, se agrega en la misma operación
+    // Un .gp sin audio elegido junto con el mp3: queda como la tablatura de la canción.
+    if (gpElegido) await guardarTablatura(id, gpElegido.gp, gpElegido.gp.name);
   } catch (error) {
     const sinEspacio = error && error.name === "QuotaExceededError";
     mostrarAviso(sinEspacio
@@ -883,21 +1003,27 @@ const esCelular = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 opcionCarpeta.hidden = !("webkitdirectory" in HTMLInputElement.prototype) || esCelular;
 
 function prepararLote(archivos, carpeta) {
-  // Solo los audios, en orden alfabético.
+  // Los audios y los .gp, en orden alfabético.
   archivosLote = [...archivos]
-    .filter((a) => a.type.startsWith("audio/") || /\.mp3$/i.test(a.name))
+    .filter((a) => a.type.startsWith("audio/") || /\.mp3$/i.test(a.name) || EXTENSIONES_GUITAR_PRO.test(a.name))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
   if (archivosLote.length === 0) {
     lote.hidden = true;
-    mostrarAviso("No elegiste ningún mp3.");
+    mostrarAviso("No elegiste ningún mp3 ni .gp.");
     return;
   }
   mostrarAviso("");
-  const n = archivosLote.length;
-  resumenLote.textContent = `${n === 1 ? "1 canción elegida" : `${n} canciones elegidas`}. `
-    + "Se guardan sin analizar; cada una se analiza la primera vez que la abrís.";
+  const gps = archivosLote.filter((a) => EXTENSIONES_GUITAR_PRO.test(a.name)).length;
+  const mp3s = archivosLote.length - gps;
+  const partes = [];
+  if (mp3s) partes.push(mp3s === 1 ? "1 mp3" : `${mp3s} mp3`);
+  if (gps) partes.push(gps === 1 ? "1 .gp" : `${gps} .gp`);
+  resumenLote.textContent = `${partes.join(" y ")} elegidos. `
+    + (gps ? "Los .gp con audio se arman con su tablatura (acordes y sincronización); un .gp sin audio va con el mp3 del mismo nombre. " : "")
+    + (mp3s ? "Los mp3 se guardan sin analizar: cada uno se analiza la primera vez que lo abrís." : "");
   if (carpeta) inputListaLote.value = carpeta;          // propuesta: el nombre de la carpeta
-  guardarLote.textContent = n === 1 ? "Guardar 1 canción" : `Guardar ${n} canciones`;
+  // Con solo mp3 se sabe cuántas canciones son; con .gp, recién al leerlos (un .gp puede ir con su mp3).
+  guardarLote.textContent = gps ? "Guardar" : mp3s === 1 ? "Guardar 1 canción" : `Guardar ${mp3s} canciones`;
   lote.hidden = false;
 }
 
@@ -910,32 +1036,73 @@ inputCarpeta.addEventListener("change", () => {
 
 guardarLote.addEventListener("click", async () => {
   const nombreLista = inputListaLote.value.replace(/\s+/g, " ").trim();
-  const total = archivosLote.length;
   cancelarLote = false;
   capaProgreso.hidden = false;
+  barraProgreso.value = 0;
   let guardadas = 0;
+  const sinAudio = [];
   try {
-    // Al revés: cada una queda primera en la lista, así la lista termina en orden alfabético.
-    for (const archivo of archivosLote.slice().reverse()) {
+    // Primera pasada: de cada .gp solo se anota el nombre y si trae audio (se
+    // suelta enseguida, para no tener varios audios en memoria). Los que no
+    // traen audio buscan su mp3 en el lote (mismo nombre, sin "_synced").
+    const gps = archivosLote.filter((a) => EXTENSIONES_GUITAR_PRO.test(a.name));
+    const mp3s = archivosLote.filter((a) => !EXTENSIONES_GUITAR_PRO.test(a.name));
+    const canciones = [];    // { nombre, gp (el archivo .gp), conAudio, mp3 }
+    for (const [k, archivo] of gps.entries()) {
       if (cancelarLote) break;
+      textoProgreso.textContent = `Leyendo ${archivo.name} (${k + 1} de ${gps.length})…`;
+      let info;
+      try {
+        info = await leerGuitarPro(archivo);
+      } catch {
+        sinAudio.push(archivo.name);
+        continue;
+      }
+      if (info.audio) {
+        canciones.push({ nombre: info.nombre, gp: archivo, conAudio: true, mp3: null });
+      } else {
+        const par = mp3s.find((m) => claveDeArchivo(m.name) === claveDeArchivo(archivo.name));
+        if (par) canciones.push({ nombre: par.name.replace(/\.[^.]+$/, ""), gp: archivo, conAudio: false, mp3: par });
+        else sinAudio.push(archivo.name);
+      }
+    }
+    for (const mp3 of mp3s) {
+      if (!canciones.some((c) => c.mp3 === mp3)) canciones.push({ nombre: mp3.name.replace(/\.[^.]+$/, ""), gp: null, conAudio: false, mp3 });
+    }
+    canciones.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    const total = canciones.length;
+    // Al revés: cada una queda primera en la lista, así la lista termina en orden alfabético.
+    for (const cancion of canciones.slice().reverse()) {
+      if (cancelarLote) break;
+      const base = guardadas / total;
       textoProgreso.textContent = `Guardando ${guardadas + 1} de ${total}…`;
-      barraProgreso.value = guardadas / total;
-      await guardarCancion({
-        nombre: archivo.name.replace(/\.[^.]+$/, ""),
-        tonalidad: "",
-        tempo: 0,
-        acordes: [],
-        pendiente: true,            // se analiza al abrirla
-        ajuste: 0,
-        tamanoMp3: archivo.size,
-        agregada: Date.now(),
-      }, archivo, nombreLista);
+      barraProgreso.value = base;
+      // Segunda pasada: el .gp se vuelve a leer recién al guardarlo.
+      const info = cancion.gp ? await leerGuitarPro(cancion.gp) : null;
+      if (info && cancion.conAudio) {
+        await guardarCancionDesdeGuitarPro(info, cancion.nombre, nombreLista, (f, etapa) => {
+          barraProgreso.value = base + f / total;
+          textoProgreso.textContent = `${guardadas + 1} de ${total}: ${etapa}…`;
+        });
+      } else {
+        const id = await guardarCancion({
+          nombre: cancion.nombre,
+          tonalidad: "",
+          tempo: 0,
+          acordes: [],
+          pendiente: true,            // se analiza al abrirla
+          ajuste: 0,
+          tamanoMp3: cancion.mp3.size,
+          agregada: Date.now(),
+        }, cancion.mp3, nombreLista);
+        if (info) await guardarTablatura(id, info.gp, info.gp.name);
+      }
       guardadas++;
     }
   } catch (error) {
     const sinEspacio = error && error.name === "QuotaExceededError";
     alert((sinEspacio ? "No hay más espacio en el celular." : "No pude guardar una de las canciones: " + error.message)
-      + `\nSe guardaron ${guardadas} de ${total}.`);
+      + `\nSe guardaron ${guardadas}.`);
   } finally {
     capaProgreso.hidden = true;
   }
@@ -943,7 +1110,8 @@ guardarLote.addEventListener("click", async () => {
   lote.hidden = true;
   await pedirPersistencia();
   volverABiblioteca();
-  mostrarMensaje(guardadas === 1 ? "1 canción guardada" : `${guardadas} canciones guardadas`);
+  mostrarMensaje((guardadas === 1 ? "1 canción guardada" : `${guardadas} canciones guardadas`)
+    + (sinAudio.length ? ` · ${sinAudio.length} .gp sin audio ni mp3 (no se guardaron)` : ""));
 });
 
 /* ==================================================================

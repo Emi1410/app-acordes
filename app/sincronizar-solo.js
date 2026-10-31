@@ -43,6 +43,11 @@ let cancionDeSyncAntes = null;
 
 const TICKS_NEGRA = 960;
 
+// La envolvente de ataques (analizador.js) marca cada golpe un poco tarde:
+// con golpes sintéticos en tiempos conocidos, 28 ms. Al ubicar los compases
+// con ella hay que descontarlo (si no, la tablatura queda 28 ms atrasada).
+const SESGO_ENVOLVENTE_MS = 28;
+
 // Devuelve una función tick -> ms de la partitura, con sus cambios de tempo.
 function crearMapaDeTempo(partitura) {
   const cambios = [];
@@ -295,9 +300,10 @@ async function calcularSincronizacionAutomatica(alProgreso, partitura = apiTabs.
     });
   }
 
-  // Pocos puntos: donde de verdad cambia el tempo (tolerancia 30 ms).
+  // Pocos puntos: donde de verdad cambia el tempo (tolerancia 30 ms), sin el
+  // retraso propio de la envolvente de ataques.
   const conConfianza = simplificar(compases, 30)
-    .map((p) => ({ compas: p.compas, ms: Math.round(p.ms), confianza: p.confianza }));
+    .map((p) => ({ compas: p.compas, ms: Math.round(p.ms - SESGO_ENVOLVENTE_MS), confianza: p.confianza }));
   alProgreso(1, "Listo");
   return {
     inicio: Math.max(0, conConfianza[0].ms),

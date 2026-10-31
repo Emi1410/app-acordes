@@ -295,6 +295,18 @@ function obtenerTablatura(id) {
   return transaccion(["tablaturas"], "readonly", (tx) => tx.objectStore("tablaturas").get(id));
 }
 
+/** Reemplaza el audio de una canción (por ejemplo, por el que trae un .gp). */
+function reemplazarAudio(id, archivo) {
+  return transaccion(["canciones", "audios"], "readwrite", (tx) => {
+    tx.objectStore("audios").put({ id, mp3: archivo });
+    const almacen = tx.objectStore("canciones");
+    const pedido = almacen.get(id);
+    pedido.addEventListener("success", () => {
+      if (pedido.result) almacen.put({ ...pedido.result, tamanoMp3: archivo.size });
+    });
+  });
+}
+
 /** Guarda el ajuste de sincronización de una canción. */
 function guardarAjuste(id, ajuste) {
   return actualizarCancion(id, { ajuste });

@@ -2836,3 +2836,45 @@ body {
     width: 56px;
   }
 }
+
+/* ==================================================================
+   Agregar canción desde Guitar Pro (.gp con el audio adentro)
+   ================================================================== */
+
+.mas-opciones {
+  color: var(--texto-suave);
+}
+
+.mas-opciones summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 4px 0;
+}
+
+.mas-opciones .archivos {
+  margin-top: 6px;
+}
+
+.portada-agregar {
+  align-self: center;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+
+/* Portada chiquita en la biblioteca */
+.portada-cancion {
+  flex: none;
+  align-self: center;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.etiqueta-gp {
+  border: 1px solid rgba(74, 222, 128, 0.5);
+  background: rgba(74, 222, 128, 0.1);
+  color: #86efac;
+}

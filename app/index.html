@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=3.2">
+  <link rel="stylesheet" href="style.css?v=3.3">
 </head>
 <body>
 
@@ -44,23 +44,40 @@
       <h1>Agregar canción</h1>
     </header>
 
-    <!-- Cada <label> funciona como botón: al tocarlo abre el selector de su <input> oculto. -->
+    <!-- Cada <label> funciona como botón: al tocarlo abre el selector de su <input> oculto.
+         Dos maneras: un mp3 (la app busca los acordes), o un .gp de Guitar Pro que trae
+         el audio adentro (acordes, compases y sincronización salen de la tablatura). -->
     <div class="archivos">
       <label class="boton boton-archivo">
         <input type="file" id="input-mp3" accept="audio/*,.mp3" hidden>
-        <span>Elegir mp3</span>
+        <span>mp3</span>
         <small id="nombre-mp3">Ningún archivo</small>
       </label>
       <label class="boton boton-archivo">
-        <input type="file" id="input-json" accept=".json,application/json" hidden>
-        <span>JSON (opcional)</span>
-        <small id="nombre-json">Lo analiza el celu</small>
+        <input type="file" id="input-gp" accept=".gp,.gp5,.gpx,.gp4" hidden>
+        <span>Guitar Pro con audio (.gp)</span>
+        <small id="nombre-gp">Trae audio y sincronización</small>
       </label>
     </div>
-    <p class="ayuda">
-      Con solo el mp3, la app busca los acordes en el celular.
-      Si ya tenés el JSON que generó el analizador en la compu, podés elegirlo también.
+    <!-- Portada que trae el audio del .gp (si tiene) -->
+    <img id="portada-agregar" class="portada-agregar" alt="Portada" hidden>
+    <p id="ayuda-agregar" class="ayuda">
+      Con el mp3, la app busca los acordes en el celular. Con un .gp que trae el audio,
+      los acordes, los compases y la sincronización salen de la tablatura.
     </p>
+
+    <!-- El JSON del analizador de la compu: opción secundaria -->
+    <details class="mas-opciones">
+      <summary>Más opciones</summary>
+      <div class="archivos">
+        <label class="boton boton-archivo">
+          <input type="file" id="input-json" accept=".json,application/json" hidden>
+          <span>JSON del analizador</span>
+          <small id="nombre-json">Lo analiza el celu</small>
+        </label>
+      </div>
+      <p class="ayuda">Si ya tenés el JSON que generó el analizador en la compu, se usa en vez de analizar el mp3.</p>
+    </details>
 
     <label class="campo">
       Nombre de la canción
@@ -84,10 +101,10 @@
     <section class="agregar-varias" aria-labelledby="titulo-varias">
       <h2 id="titulo-varias">Agregar varias</h2>
       <div class="archivos">
-        <!-- Varios mp3 juntos (en Android funciona también desde Google Drive) -->
+        <!-- Varios mp3 y/o .gp con audio juntos (en Android funciona también desde Google Drive) -->
         <label class="boton boton-archivo">
-          <input type="file" id="input-varias" accept="audio/*,.mp3" multiple hidden>
-          <span>Elegir varios mp3</span>
+          <input type="file" id="input-varias" accept="audio/*,.mp3,.gp,.gp5,.gpx,.gp4" multiple hidden>
+          <span>Elegir varios mp3 o .gp</span>
         </label>
         <!-- Una carpeta entera: solo si el navegador lo permite (en la compu sí; en Android no) -->
         <label id="opcion-carpeta" class="boton boton-archivo" hidden>
@@ -600,21 +617,23 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=3.2"></script>
-  <script src="acordes.js?v=3.2"></script>
-  <script src="diagrama.js?v=3.2"></script>
-  <script src="biblioteca.js?v=3.2"></script>
-  <script src="analizador.js?v=3.2"></script>
-  <script src="app.js?v=3.2"></script>
-  <script src="editor.js?v=3.2"></script>
+  <script src="acordes-extra.js?v=3.3"></script>
+  <script src="acordes.js?v=3.3"></script>
+  <script src="diagrama.js?v=3.3"></script>
+  <script src="biblioteca.js?v=3.3"></script>
+  <script src="analizador.js?v=3.3"></script>
+  <script src="app.js?v=3.3"></script>
+  <script src="editor.js?v=3.3"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=3.2"></script>
-  <script src="mastil.js?v=3.2"></script>
-  <script src="sincronizar-solo.js?v=3.2"></script>
+  <script src="tablaturas.js?v=3.3"></script>
+  <script src="mastil.js?v=3.3"></script>
+  <script src="sincronizar-solo.js?v=3.3"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=3.2"></script>
+  <script src="acordes-tablatura.js?v=3.3"></script>
   <!-- Grilla por vueltas y partes de la canción -->
-  <script src="grilla.js?v=3.2"></script>
-  <script src="partes.js?v=3.2"></script>
+  <script src="grilla.js?v=3.3"></script>
+  <script src="partes.js?v=3.3"></script>
+  <!-- Canciones desde archivos de Guitar Pro con el audio adentro -->
+  <script src="guitar-pro.js?v=3.3"></script>
 </body>
 </html>
