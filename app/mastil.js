@@ -54,6 +54,9 @@
 const contenedorMastil = document.getElementById("mastil");
 const selectorOrientacionMastil = document.getElementById("orientacion-mastil");
 const selectorEstiloMastil = document.getElementById("estilo-mastil");
+const filaFotoParado = document.getElementById("fila-foto-parado");          // (estilo Foto: mastil-foto.js)
+const filaFotoMiniatura = document.getElementById("fila-foto-miniatura");
+const filaFotoNumeros = document.getElementById("fila-foto-numeros");
 const selectorEtiquetaMastil = document.getElementById("etiqueta-mastil");
 const selectorAcordesOtra = document.getElementById("mastil-acordes-otra");
 const casillaEfectosReducidos = document.getElementById("mastil-efectos-reducidos");
@@ -78,9 +81,10 @@ let etiquetaMastil = "traste";          // "traste" | "nota"
 let acordesOtra = "normal";             // "normal" | "tenue": cómo se ven los acordes de la Guitarra 2
 let efectosReducidos = false;
 let coloresCuerda = { ...COLORES_ORIGINALES };
-let estiloMastil = "clasico";           // "clasico" (este archivo) | "3d" (mastil3d.js, experimental)
+let estiloMastil = "clasico";           // "clasico" (este archivo) | "3d" (mastil3d.js) | "foto" (mastil-foto.js)
 try {
-  if (localStorage.getItem("mastilEstilo") === "3d") estiloMastil = "3d";
+  const guardado = localStorage.getItem("mastilEstilo");
+  if (guardado === "3d" || guardado === "foto") estiloMastil = guardado;
   if (localStorage.getItem("mastilOrientacion") === "vertical") orientacionMastil = "vertical";
   if (localStorage.getItem("mastilEtiqueta") === "nota") etiquetaMastil = "nota";
   if (localStorage.getItem("mastilAcordesOtra") === "tenue") acordesOtra = "tenue";
@@ -91,11 +95,12 @@ try {
   // valores por defecto
 }
 
-// El mástil en 3D (mastil3d.js) en lugar de este.
+// El mástil en 3D (mastil3d.js) o con las fotos de la guitarra (mastil-foto.js) en lugar de este.
 const usar3D = () => estiloMastil === "3d";
+const usarFoto = () => estiloMastil === "foto";
 
-// Parado solo fuera del modo tocar y del 3D: ahí el mástil va siempre acostado y grande (practica.js).
-const mastilParado = () => orientacionMastil === "vertical" && !usar3D() && !(typeof modoTocar !== "undefined" && modoTocar);
+// Parado solo con el clásico y fuera del modo tocar: si no, el mástil va siempre grande (practica.js).
+const mastilParado = () => orientacionMastil === "vertical" && !usar3D() && !usarFoto() && !(typeof modoTocar !== "undefined" && modoTocar);
 
 function guardarPreferencia(clave, valor) {
   try { localStorage.setItem(clave, valor); } catch { /* queda para esta sesión */ }
@@ -408,11 +413,18 @@ function dibujarMastil() {
   contenedorMastil.hidden = !hay;
   vistaTabs.classList.toggle("mastil-parado", hay && mastilParado());
   vistaTabs.classList.toggle("mastil-3d", hay && usar3D());
+  // 3D y Foto: un renglón de tablatura arriba y el mástil grande abajo (style.css)
+  vistaTabs.classList.toggle("mastil-amplio", hay && (usar3D() || usarFoto()));
   if (!hay) return;
-  // Estilo 3D: lo arma y lo dibuja mastil3d.js (este lienzo queda guardado para volver).
+  // Estilos 3D y Foto: los arman y dibujan mastil3d.js y mastil-foto.js (este lienzo queda guardado para volver).
   if (usar3D()) {
     medidasMastil = null;
     armarMastil3D();
+    return;
+  }
+  if (usarFoto()) {
+    medidasMastil = null;
+    armarMastilFoto();
     return;
   }
   if (!lienzo) {
@@ -462,6 +474,10 @@ function actualizarMastil() {
 function pedirCuadro() {
   if (usar3D()) {
     pedirCuadro3D();
+    return;
+  }
+  if (usarFoto()) {
+    pedirCuadroFoto();
     return;
   }
   if (cuadroPedido || !medidasMastil || contenedorMastil.hidden || vistaTabs.hidden) return;
@@ -920,7 +936,8 @@ function dibujarProxima(g, m, nota, evento, t) {
 function mostrarOpcionesMastil() {
   selectorEstiloMastil.value = estiloMastil;
   selectorOrientacionMastil.value = orientacionMastil;
-  selectorOrientacionMastil.disabled = usar3D();   // el 3D va siempre acostado
+  selectorOrientacionMastil.disabled = usar3D() || usarFoto();   // el 3D y la foto van siempre grandes
+  filaFotoParado.hidden = filaFotoMiniatura.hidden = filaFotoNumeros.hidden = !usarFoto();
   selectorEtiquetaMastil.value = etiquetaMastil;
   selectorAcordesOtra.value = acordesOtra;
   casillaEfectosReducidos.checked = efectosReducidos;
@@ -940,7 +957,8 @@ selectorOrientacionMastil.addEventListener("change", () => {
 
 // Clásico (este archivo) o 3D (mastil3d.js). La tablatura pasa a un renglón con el 3D.
 selectorEstiloMastil.addEventListener("change", () => {
-  cambiarEstiloMastil(selectorEstiloMastil.value === "3d" ? "3d" : "clasico");
+  const valor = selectorEstiloMastil.value;
+  cambiarEstiloMastil(valor === "3d" || valor === "foto" ? valor : "clasico");
 });
 
 function cambiarEstiloMastil(estilo) {

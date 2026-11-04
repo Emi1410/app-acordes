@@ -193,8 +193,8 @@ botonSeguirSinGirar.addEventListener("click", () => {
   revisarGiro();
 });
 
-// Un solo renglón de tablatura que corre de costado: en el modo tocar y con el mástil en 3D.
-const tablaturaEnRenglon = () => modoTocar || usar3D();
+// Un solo renglón de tablatura que corre de costado: en el modo tocar y con el mástil en 3D o en foto.
+const tablaturaEnRenglon = () => modoTocar || usar3D() || usarFoto();
 
 // alphaTab: un renglón que corre de costado (solo la Guitarra 1) o las páginas de siempre.
 function ajustarTabsAlModo() {

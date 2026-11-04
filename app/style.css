@@ -3398,17 +3398,17 @@ body.modo-tocar.controles-ocultos .barra-bucle {
    tablatura que corre de costado (como en el modo tocar) y abajo la
    guitarra en 3D ocupando el resto de la vista
    ================================================================== */
-.vista-tabs.mastil-3d {
+.vista-tabs.mastil-amplio {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.vista-tabs.mastil-3d[hidden] {
+.vista-tabs.mastil-amplio[hidden] {
   display: none;
 }
 
-.vista-tabs.mastil-3d .caja-tabs {
+.vista-tabs.mastil-amplio .caja-tabs {
   flex: none;
   height: clamp(84px, 16vh, 130px);
   overflow-x: auto;
@@ -3416,7 +3416,7 @@ body.modo-tocar.controles-ocultos .barra-bucle {
   padding-top: 12px;              /* que no se corten los números de compás */
 }
 
-.vista-tabs.mastil-3d .mastil {
+.vista-tabs.mastil-amplio .mastil {
   flex: 1;
   height: auto;
   min-height: 0;
@@ -3469,11 +3469,6 @@ body.modo-tocar.controles-ocultos .barra-bucle {
   background: rgba(20, 24, 29, 0.96);
   border-right: 1px solid var(--borde);
   border-bottom: 1px solid var(--borde);
-}
-
-/* En Tabs: una barra abajo, encima de los controles */
-.aviso-sincronia.abajo {
-  justify-content: space-between;
 }
 
 /* Bucle en la tablatura: sombra y corchetes verdes, en un solo pentagrama */
@@ -3564,5 +3559,81 @@ body.modo-tocar.controles-ocultos .barra-bucle {
 
   .diagrama-par {
     max-width: none;
+  }
+}
+
+/* ==================================================================
+   v3.8: mástil "Foto" (mastil-foto.js)
+   ================================================================== */
+.mastil {
+  position: relative;
+}
+
+.lienzo-mastil-foto {
+  display: block;
+  background: #0a0b0d;
+}
+
+/* Miniatura de la guitarra entera, arriba a la derecha del mástil */
+.miniatura-guitarra {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 4px 14px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.miniatura-guitarra[hidden] {
+  display: none;
+}
+
+/* Botón para ocultar o mostrar la miniatura */
+.boton-miniatura {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  background: rgba(14, 17, 21, 0.85);
+  color: #e8eaed;
+  font-size: 0.95rem;
+  line-height: 1;
+  z-index: 2;
+}
+
+/* ==================================================================
+   v3.9: "Sincronización desactivada" en Tabs: una pastilla chica que
+   ocupa su lugar en la vista (entre la tablatura y el mástil), sin
+   tapar ninguno de los dos (seguir.js la pone ahí)
+   ================================================================== */
+.aviso-sincronia.en-tabs {
+  position: static;
+  flex: none;
+  align-self: center;
+  justify-self: center;
+  width: auto;
+  margin: 0;
+  padding: 2px 2px 2px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  box-shadow: none;
+}
+
+.aviso-sincronia.en-tabs #activar-sincronia {
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+/* Con la tablatura al lado del mástil (celular acostado, mástil clásico): arriba de los dos */
+@media (orientation: landscape) and (max-height: 500px) {
+  .vista-tabs:not(.mastil-amplio):not(.mastil-parado) .aviso-sincronia.en-tabs {
+    grid-column: 1 / -1;
+    grid-row: 1;
   }
 }

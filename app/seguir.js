@@ -10,7 +10,9 @@
        seguirla: aparece "Sincronización desactivada" con "Activar" (en
        verde, como en Chordify). En Pulsos y Grilla, justo arriba del
        casillero que suena (o en el borde, si quedó fuera de la vista);
-       en Tabs, como una barra abajo, encima de los controles. A los
+       en Tabs, una pastilla chica que ocupa su propio lugar en la vista
+       (entre la tablatura y el mástil, o arriba de los dos si están uno
+       al lado del otro): no tapa ni la tablatura ni el mástil. A los
        10 s sin tocar nada se vuelve a sincronizar sola;
      - si tocás un acorde, un compás o una nota, la canción salta ahí y
        la vista vuelve a seguirla.
@@ -22,6 +24,7 @@
    ================================================================== */
 
 const avisoSincronia = document.getElementById("aviso-sincronia");
+const lugarDelAviso = { padre: avisoSincronia.parentElement, siguiente: avisoSincronia.nextSibling };   // para volver a ponerlo
 const botonActivarSincronia = document.getElementById("activar-sincronia");
 
 const ESPERA_RESINCRONIZAR_MS = 10000;
@@ -68,31 +71,27 @@ botonActivarSincronia.addEventListener("click", resincronizarVista);
 function ubicarAvisoSincronia() {
   if (vistaSincronizada) return;
   requestAnimationFrame(ubicarAvisoSincronia);
-  const ancho = avisoSincronia.offsetWidth, alto = avisoSincronia.offsetHeight;
-  const controles = document.querySelector(".reproductor").getBoundingClientRect();
   const enTabs = !vistaTabs.hidden;
-  avisoSincronia.classList.toggle("abajo", enTabs);
+  avisoSincronia.classList.toggle("en-tabs", enTabs);
   avisoSincronia.classList.toggle("en-cursor", !enTabs);
-  let izquierda, arriba;
   if (enTabs) {
-    // Una barra abajo, encima de los controles
-    izquierda = 8;
-    arriba = controles.top - alto - 6;
-  } else {
-    const enPulsos = !vistaPulsos.hidden;
-    const contenedor = enPulsos ? tira : lista;
-    const celda = contenedor.querySelector(enPulsos ? ".pulso.actual" : ".compas-grilla.actual");
-    const caja = contenedor.getBoundingClientRect();
-    const r = celda ? celda.getBoundingClientRect() : caja;
-    // Arriba del casillero; si quedó fuera de la vista, en el borde más cercano.
-    const centro = Math.min(caja.right - ancho / 2 - 4, Math.max(caja.left + ancho / 2 + 4, r.left + r.width / 2));
-    const tope = Math.min(caja.bottom - 8, Math.max(caja.top + 8, r.top));
-    izquierda = Math.max(4, Math.min(innerWidth - ancho - 4, centro - ancho / 2));
-    arriba = Math.max(4, tope - alto - 8);
+    // Dentro de la vista, antes del mástil: ocupa su lugar (no flota encima de nada)
+    if (avisoSincronia.nextSibling !== contenedorMastil) vistaTabs.insertBefore(avisoSincronia, contenedorMastil);
+    avisoSincronia.style.left = avisoSincronia.style.top = "";
+    return;
   }
-  avisoSincronia.style.left = `${Math.round(izquierda)}px`;
-  avisoSincronia.style.top = `${Math.round(arriba)}px`;
-  avisoSincronia.style.width = enTabs ? `${innerWidth - 16}px` : "";
+  if (avisoSincronia.parentElement !== lugarDelAviso.padre) lugarDelAviso.padre.insertBefore(avisoSincronia, lugarDelAviso.siguiente);
+  const ancho = avisoSincronia.offsetWidth, alto = avisoSincronia.offsetHeight;
+  const enPulsos = !vistaPulsos.hidden;
+  const contenedor = enPulsos ? tira : lista;
+  const celda = contenedor.querySelector(enPulsos ? ".pulso.actual" : ".compas-grilla.actual");
+  const caja = contenedor.getBoundingClientRect();
+  const r = celda ? celda.getBoundingClientRect() : caja;
+  // Arriba del casillero; si quedó fuera de la vista, en el borde más cercano.
+  const centro = Math.min(caja.right - ancho / 2 - 4, Math.max(caja.left + ancho / 2 + 4, r.left + r.width / 2));
+  const tope = Math.min(caja.bottom - 8, Math.max(caja.top + 8, r.top));
+  avisoSincronia.style.left = `${Math.round(Math.max(4, Math.min(innerWidth - ancho - 4, centro - ancho / 2)))}px`;
+  avisoSincronia.style.top = `${Math.round(Math.max(4, tope - alto - 8))}px`;
 }
 
 // Cada vista que se desliza: la tira, la grilla y la tablatura.

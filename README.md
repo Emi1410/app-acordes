@@ -11,7 +11,7 @@ El proyecto tiene dos partes:
 
 - `analizador/`: código Python del analizador.
 - `app/`: la app (HTML, CSS y JavaScript, sin librerías externas).
-- `herramientas/`: scripts para generar y verificar las posiciones de acordes.
+- `herramientas/`: scripts para generar y verificar las posiciones de acordes, y para preparar las fotos del mástil "Foto".
 - `pruebas/`: página para comparar el analizador de JavaScript con el de Python.
 - `canciones/`: los mp3 a analizar (no se suben a Git).
 - `resultados/`: los JSON generados.
@@ -34,6 +34,22 @@ python herramientas/convertir_chords_db.py guitar.json
 ```
 
 El conversor solo incluye las posiciones que pasan la verificación.
+
+## Mástil "Foto" (fotos de la guitarra)
+
+El estilo "Foto" del mástil (vista Tabs, "Pistas y sync") usa fotos de la guitarra. Las originales
+(`fotos-guitarra/`, sobre una tela azul) no se suben al repo; para regenerar las versiones de la app:
+
+```
+pip install pillow numpy scipy
+python herramientas/preparar_fotos_mastil.py
+```
+
+Eso deja en `app/fotos-mastil/` cada foto en WebP, en dos tamaños, con el fondo azul reemplazado por un
+fondo oscuro de estudio. La calibración (dónde caen los trastes y las cuerdas en cada foto) está en
+`app/fotos-mastil/calibracion.js`; para rehacerla, abrir `app/calibrar-fotos.html` en la compu, tocar en
+cada foto los bordes del diapasón en la cejuela, en el traste 12 y en el último traste, comprobar que las
+líneas calculadas coinciden y descargar el archivo.
 
 ## Activar el entorno en Windows (PowerShell)
 

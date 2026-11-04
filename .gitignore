@@ -20,3 +20,6 @@ __pycache__/
 *.gp5
 *.gpx
 *.gp4
+
+# Fotos originales de la guitarra (pesadas): en la app van las versiones preparadas (app/fotos-mastil/)
+fotos-guitarra/

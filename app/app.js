@@ -1900,7 +1900,8 @@ function sonarClic(cuando, primerTiempo) {
 /* Metrónomo luminoso: un punto chico que destella en cada tiempo (más fuerte
    en el primero del compás), siempre en el mismo lugar: en el celular,
    abajo a la izquierda, justo encima de los controles (que ahí están
-   siempre abajo), en Pulsos, Grilla, Tabs y en el modo tocar; en la compu,
+   siempre abajo), en Pulsos, Grilla y Tabs; en el modo tocar, en la
+   esquina de arriba a la izquierda (abajo está el mástil); en la compu,
    en la esquina de abajo a la izquierda de la ventana. Se programa junto con los clics (aunque el sonido esté
    apagado) y destella cuando el tiempo se escucha. */
 const luzMetronomo = document.getElementById("luz-metronomo");
@@ -1919,7 +1920,8 @@ function ubicarLuzMetronomo() {
   luzMetronomo.hidden = !metronomoVisual || idActual === null || document.getElementById("pantalla-reproductor").hidden;
   if (luzMetronomo.hidden) return;
   const controles = document.querySelector(".reproductor").getBoundingClientRect();
-  luzMetronomo.style.top = `${Math.round(enCelular.matches || modoTocar ? controles.top - 22 : innerHeight - 30)}px`;
+  luzMetronomo.style.top = `${Math.round(modoTocar ? 10 : enCelular.matches ? controles.top - 22 : innerHeight - 30)}px`;
+  luzMetronomo.style.left = modoTocar ? "10px" : "";
 }
 const enCelular = window.matchMedia("(max-width: 600px), (max-height: 500px)");
 enCelular.addEventListener("change", ubicarLuzMetronomo);

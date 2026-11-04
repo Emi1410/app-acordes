@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Calibrar fotos del mástil</title>
+  <!--
+    Herramienta para la compu (no es parte de la app): calibra las fotos del
+    mástil "Foto". En cada foto se tocan seis puntos: los bordes del diapasón
+    (del lado de la 6ª y del lado de la 1ª) en la cejuela, en el traste 12 y
+    en el último traste visible. Con eso, la perspectiva y la fórmula real de
+    la separación de los trastes (foto-geometria.js), se dibujan encima todos
+    los trastes y las cuerdas calculados, para comprobar que coinciden.
+    Al terminar, "Descargar calibracion.js" y guardarlo en app/fotos-mastil/.
+  -->
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font: 14px system-ui, sans-serif; background: #0b0d10; color: #e8eaed; display: grid; grid-template-columns: 290px 1fr; height: 100vh; }
+    aside { padding: 12px; overflow-y: auto; border-right: 1px solid #2a3038; display: flex; flex-direction: column; gap: 10px; }
+    h1 { font-size: 1.05rem; margin: 0; }
+    label, .fila { display: flex; gap: 6px; align-items: center; }
+    select, input, button, textarea { font: inherit; background: #1b2026; color: inherit; border: 1px solid #39414b; border-radius: 6px; padding: 4px 8px; }
+    button { cursor: pointer; }
+    .puntos button { width: 100%; text-align: left; margin-bottom: 4px; }
+    .puntos button[aria-pressed="true"] { border-color: #f5b83d; color: #f5b83d; }
+    .ayuda { color: #9aa4ae; font-size: 0.85rem; margin: 0; }
+    textarea { width: 100%; height: 160px; font: 11px monospace; }
+    main { position: relative; overflow: hidden; cursor: crosshair; }
+    canvas { position: absolute; inset: 0; }
+    #error { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <aside>
+    <h1>Calibrar fotos del mástil</h1>
+    <label>Foto <select id="foto"></select></label>
+    <p class="ayuda">Elegí un punto y tocalo en la foto: el borde del diapasón (con el filete) donde lo cruza la cejuela o el alambre del traste. Rueda: zoom; arrastrar con el botón derecho o con Mayúscula: mover.</p>
+    <div class="puntos" id="puntos"></div>
+    <label>Último traste visible <input type="number" id="ultimo" min="13" max="24" value="22" style="width:60px"></label>
+    <div class="fila"><input type="checkbox" id="ver-cuerdas" checked> <label for="ver-cuerdas">Ver cuerdas</label></div>
+    <p>Error de la calibración: <span id="error">–</span></p>
+    <button id="descargar">Descargar calibracion.js</button>
+    <textarea id="salida" readonly></textarea>
+  </aside>
+  <main id="zona"><canvas id="lienzo"></canvas></main>
+
+  <script src="foto-geometria.js?v=1"></script>
+  <script src="fotos-mastil/calibracion.js?v=1"></script>
+  <script>
+    "use strict";
+    const NOMBRES = ["diagonal", "perspectiva", "frente", "entera"];
+    const PUNTOS = [
+      ["cejuela", 0, "Cejuela, borde de la 6ª"], ["cejuela", 1, "Cejuela, borde de la 1ª"],
+      ["traste12", 0, "Traste 12, borde de la 6ª"], ["traste12", 1, "Traste 12, borde de la 1ª"],
+      ["ultimo", 0, "Último traste, borde de la 6ª"], ["ultimo", 1, "Último traste, borde de la 1ª"],
+    ];
+    const $ = (id) => document.getElementById(id);
+    const lienzo = $("lienzo"), g = lienzo.getContext("2d");
+    const calibracion = JSON.parse(JSON.stringify(window.CALIBRACION_FOTOS || {}));
+    let foto = new URLSearchParams(location.search).get("foto") || "diagonal";
+    let imagen = null, elegido = 0;
+    let vista = { escala: 1, x: 0, y: 0 };   // imagen en px de la pantalla: x_pantalla = x_img * escala + vista.x
+
+    for (const n of NOMBRES) $("foto").append(new Option(n, n));
+    $("foto").value = foto;
+
+    const puntoDe = (c, [grupo, lado]) => (grupo === "ultimo" ? c.puntos.ultimo.puntos[lado] : c.puntos[grupo][lado]);
+    function mostrarPuntos() {
+      $("puntos").replaceChildren(...PUNTOS.map((p, i) => {
+        const b = document.createElement("button");
+        b.textContent = p[2];
+        b.setAttribute("aria-pressed", String(i === elegido));
+        b.onclick = () => { elegido = i; mostrarPuntos(); };
+        return b;
+      }));
+    }
+
+    function cargarFoto() {
+      imagen = new Image();
+      imagen.onload = () => { encuadrar(); dibujar(); };
+      imagen.src = `fotos-mastil/${foto}-grande.webp`;
+      if (!calibracion[foto]) {
+        const medio = { x: 0.5, y: 0.5 };
+        calibracion[foto] = { ancho: 0, alto: 0, puntos: { cejuela: [{ ...medio }, { ...medio }], traste12: [{ ...medio }, { ...medio }], ultimo: { traste: 22, puntos: [{ ...medio }, { ...medio }] } } };
+      }
+      $("ultimo").value = calibracion[foto].puntos.ultimo.traste;
+    }
+
+    function encuadrar() {
+      const z = $("zona").getBoundingClientRect();
+      lienzo.width = z.width * devicePixelRatio; lienzo.height = z.height * devicePixelRatio;
+      lienzo.style.width = z.width + "px"; lienzo.style.height = z.height + "px";
+      const e = Math.min(z.width / imagen.width, z.height / imagen.height);
+      vista = { escala: e, x: (z.width - imagen.width * e) / 2, y: (z.height - imagen.height * e) / 2 };
+    }
+
+    function dibujar() {
+      if (!imagen || !imagen.complete) return;
+      const c = calibracion[foto];
+      c.ancho = imagen.width; c.alto = imagen.height;
+      g.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+      g.clearRect(0, 0, lienzo.width, lienzo.height);
+      g.drawImage(imagen, vista.x, vista.y, imagen.width * vista.escala, imagen.height * vista.escala);
+      const aPantalla = (p) => [vista.x + p.x * imagen.width * vista.escala, vista.y + p.y * imagen.height * vista.escala];
+      const geo = geometriaDeFoto(c);
+      if (geo) {
+        // Trastes calculados (de borde a borde del diapasón) y cuerdas
+        for (let n = 0; n <= Math.max(22, c.puntos.ultimo.traste); n++) {
+          const X = xDeTrasteMm(n);
+          const a = aPantalla(aFoto(geo.H, X, -anchoDiapasonMm(X) / 2)), b = aPantalla(aFoto(geo.H, X, anchoDiapasonMm(X) / 2));
+          g.strokeStyle = n === 0 || n === 12 || n === c.puntos.ultimo.traste ? "#f5b83d" : "rgba(80,220,255,0.85)";
+          g.lineWidth = n === 0 ? 2.5 : 1.5;
+          g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke();
+          g.fillStyle = "#ffffff"; g.font = "11px system-ui";
+          if (n) g.fillText(String(n), b[0] + 6, b[1]);
+        }
+        if ($("ver-cuerdas").checked) {
+          for (let fila = 0; fila < 6; fila++) {
+            g.strokeStyle = ["#a855f7", "#22c55e", "#f97316", "#3b82f6", "#facc15", "#ef4444"][fila];
+            g.lineWidth = 1.2;
+            g.beginPath();
+            for (let n = 0; n <= 22; n += 0.5) g.lineTo(...aPantalla(geo.punto(xDeTrasteMm(n), fila)));
+            g.stroke();
+          }
+        }
+        $("error").textContent = `${(geo.error * Math.max(imagen.width, imagen.height)).toFixed(1)} px (de la foto)`;
+      }
+      // Los seis puntos tocados
+      PUNTOS.forEach((p, i) => {
+        const [x, y] = aPantalla(puntoDe(c, p));
+        g.strokeStyle = i === elegido ? "#f5b83d" : "#ffffff";
+        g.lineWidth = 2;
+        g.beginPath(); g.arc(x, y, 7, 0, Math.PI * 2); g.moveTo(x - 11, y); g.lineTo(x + 11, y); g.moveTo(x, y - 11); g.lineTo(x, y + 11); g.stroke();
+      });
+      $("salida").value = textoCalibracion();
+    }
+
+    function textoCalibracion() {
+      const redondear = (p) => ({ x: Math.round(p.x * 1e4) / 1e4, y: Math.round(p.y * 1e4) / 1e4 });
+      const limpio = {};
+      for (const [n, c] of Object.entries(calibracion)) {
+        limpio[n] = { ancho: c.ancho, alto: c.alto, puntos: {
+          cejuela: c.puntos.cejuela.map(redondear), traste12: c.puntos.traste12.map(redondear),
+          ultimo: { traste: c.puntos.ultimo.traste, puntos: c.puntos.ultimo.puntos.map(redondear) } } };
+      }
+      return "// Calibración de las fotos del mástil \"Foto\" (se hace una sola vez, con calibrar-fotos.html).\n"
+        + "// Por cada foto: los bordes del diapasón (del lado de la 6ª y del lado de la 1ª) en la cejuela,\n"
+        + "// en el traste 12 y en el último traste visible, en fracción del ancho y del alto de la foto.\n"
+        + "// \"ancho\" y \"alto\" son los de la imagen grande (la de toda la resolución).\n"
+        + "window.CALIBRACION_FOTOS = " + JSON.stringify(limpio, null, 2) + ";\n";
+    }
+
+    // Tocar: ubica el punto elegido y pasa al siguiente. Rueda: zoom. Botón derecho o Mayúscula: mover.
+    let arrastre = null;
+    lienzo.addEventListener("pointerdown", (e) => {
+      if (e.button === 2 || e.shiftKey) { arrastre = { x: e.clientX - vista.x, y: e.clientY - vista.y }; return; }
+      const r = lienzo.getBoundingClientRect();
+      const x = (e.clientX - r.left - vista.x) / (imagen.width * vista.escala);
+      const y = (e.clientY - r.top - vista.y) / (imagen.height * vista.escala);
+      Object.assign(puntoDe(calibracion[foto], PUNTOS[elegido]), { x, y });
+      elegido = (elegido + 1) % PUNTOS.length;
+      mostrarPuntos();
+      dibujar();
+    });
+    addEventListener("pointermove", (e) => { if (arrastre) { vista.x = e.clientX - arrastre.x; vista.y = e.clientY - arrastre.y; dibujar(); } });
+    addEventListener("pointerup", () => { arrastre = null; });
+    lienzo.addEventListener("contextmenu", (e) => e.preventDefault());
+    lienzo.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const r = lienzo.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      const k = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+      vista.x = mx - (mx - vista.x) * k; vista.y = my - (my - vista.y) * k; vista.escala *= k;
+      dibujar();
+    }, { passive: false });
+    $("foto").onchange = () => { foto = $("foto").value; cargarFoto(); };
+    $("ultimo").onchange = () => { calibracion[foto].puntos.ultimo.traste = Number($("ultimo").value); dibujar(); };
+    $("ver-cuerdas").onchange = dibujar;
+    $("descargar").onclick = () => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([textoCalibracion()], { type: "text/javascript" }));
+      a.download = "calibracion.js";
+      a.click();
+    };
+    addEventListener("resize", () => { encuadrar(); dibujar(); });
+    mostrarPuntos();
+    cargarFoto();
+  </script>
+</body>
+</html>
