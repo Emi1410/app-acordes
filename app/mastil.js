@@ -529,11 +529,15 @@ function dibujarCuadro(marca) {
     textoDerecho(g, m, nombres[deReferencia.afinacion[fila] % 12], m.clavijero / 2 + 1, yDeCuerda(m, fila));
   }
 
-  // Cuerdas: grises las que no suenan; las que suenan, encendidas del dedo al final y vibrando
+  // Cuerdas: grises las que no suenan; las que suenan, encendidas del dedo al final y vibrando.
+  // Si suenan dos o más notas juntas (un acorde, un power chord) no se encienden:
+  // se ven solo los puntos, para que el acorde se lea limpio.
   const activas = new Map();   // fila -> { nota, evento }
   for (const evento of visto.eventos) for (const nota of evento.notas) if (!nota.muerta) activas.set(nota.fila, { nota, evento });
+  const esAcorde = activas.size >= 2;
+  contenedorMastil.dataset.lineas = esAcorde ? "no" : "si";
   for (let fila = 0; fila < m.cuerdas; fila++) {
-    if (dibujarCuerda(g, m, fila, activas.get(fila), t, visto.opacidad)) animando = true;
+    if (dibujarCuerda(g, m, fila, esAcorde ? undefined : activas.get(fila), t, visto.opacidad)) animando = true;
   }
 
   // Notas: las que vienen (tenues) y las que suenan
@@ -812,8 +816,6 @@ function dibujarNota(g, m, nota, evento, t, opacidad, tecnicas) {
     g.stroke();
   } else {
     g.fillStyle = color;
-    g.strokeStyle = "#0b0d10";
-    g.lineWidth = 1.5;
     g.beginPath();
     if (nota.armonico) {
       tecnicas.add("armonico");
@@ -823,7 +825,18 @@ function dibujarNota(g, m, nota, evento, t, opacidad, tecnicas) {
     } else {
       g.arc(x, y, radio, 0, Math.PI * 2);
     }
+    // Una sombra suave que lo separa de la madera, y un borde blanco fino
+    if (!efectosReducidos) {
+      g.shadowColor = "rgba(0,0,0,0.65)";
+      g.shadowBlur = 5;
+      g.shadowOffsetY = 1;
+    }
     g.fill();
+    g.shadowColor = "transparent";
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+    g.strokeStyle = "rgba(255,255,255,0.92)";
+    g.lineWidth = 1.6;
     g.stroke();
     const texto = etiquetaMastil === "nota"
       ? nombresDeNotas(tonalidadOriginal)[(nota.altura + Math.round(estado.semitonos)) % 12]

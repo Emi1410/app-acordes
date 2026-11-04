@@ -3055,3 +3055,367 @@ body.modo-tocar.controles-ocultos .salir-modo-tocar {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ==================================================================
+   v3.5: velocidad, bucle con corchetes, sincronización, destello,
+   afinación de la tablatura, notas y entrenador
+   ================================================================== */
+
+/* Ocho controles en la fila: 0:00 · anterior · play · siguiente · metrónomo · velocidad · bucle · Más */
+.transporte {
+  grid-template-columns: repeat(8, 1fr);
+}
+
+/* Botón de velocidad: muestra la actual; en amarillo si no es x1 */
+.boton-velocidad {
+  font-weight: 800;
+  font-size: 0.85rem;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.boton-velocidad.distinta {
+  border-color: var(--acento);
+  color: var(--acento);
+}
+
+/* Cajita flotante de la velocidad, arriba del botón */
+.caja-velocidad {
+  position: fixed;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  background: #171b20;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.caja-velocidad[hidden] {
+  display: none;
+}
+
+.caja-velocidad > button:not(.boton-lista) {
+  width: 46px;
+  height: 46px;
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  background: #22282f;
+  color: inherit;
+  font-size: 1.5rem;
+}
+
+.caja-velocidad > button:disabled {
+  opacity: 0.35;
+}
+
+.caja-velocidad output {
+  min-width: 64px;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--acento);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Botón del bucle: las flechas; en amarillo con el bucle armado */
+.boton-bucle svg {
+  fill: none;
+}
+
+/* Barra del bucle: un renglón arriba de la vista (con el celular acostado
+   y en el modo tocar, flota abajo, encima de los controles) */
+.barra-bucle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--acento);
+  border-radius: 14px;
+  background: rgba(20, 24, 29, 0.95);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+.barra-bucle[hidden] {
+  display: none;
+}
+
+.texto-bucle {
+  color: var(--acento);
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.barra-bucle select {
+  min-width: 0;
+  max-width: 120px;
+  min-height: 32px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: #22282f;
+  color: inherit;
+}
+
+.barra-bucle .boton-chico {
+  min-height: 32px;
+  padding: 0 8px;
+}
+
+#boton-entrenador[aria-pressed="true"] {
+  border-color: var(--acento);
+  background: var(--acento);
+  color: var(--acento-texto);
+}
+
+/* La zona del bucle y sus manijas, dentro de la vista (se desplazan con ella) */
+.tira,
+.grilla-vueltas {
+  position: relative;
+}
+
+.capa-bucle {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.sombra-bucle {
+  position: absolute;
+  border-radius: 6px;
+  background: rgba(245, 184, 61, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(245, 184, 61, 0.45);
+}
+
+.manija-bucle {
+  position: absolute;
+  width: 30px;               /* zona para el dedo; la barra se dibuja en el medio */
+  margin-left: -15px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: ew-resize;
+}
+
+/* La barra del corchete y su agarradera ([ al inicio, ] al final) */
+.manija-bucle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 13px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--acento);
+  /* borde oscuro: se ve también sobre el casillero amarillo del compás que suena */
+  box-shadow: 0 0 0 2px #0b0d10, 0 0 8px rgba(245, 184, 61, 0.7);
+}
+
+.manija-bucle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 30px;
+  margin-top: -15px;
+  border: 4px solid var(--acento);
+  border-radius: 4px;
+  background: rgba(20, 24, 29, 0.85);
+}
+
+.manija-inicio::after {
+  left: 13px;
+  border-left-width: 4px;
+  border-right: none;
+  border-radius: 4px 0 0 4px;
+}
+
+.manija-fin::after {
+  right: 13px;
+  border-right-width: 4px;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+}
+
+.manija-bucle.arrastrando::before {
+  width: 6px;
+  left: 12px;
+}
+
+/* "Sincronización desactivada" (al deslizar una vista) */
+.aviso-sincronia {
+  position: fixed;
+  z-index: 46;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 14px;
+  background: rgba(20, 24, 29, 0.96);
+  border: 1px solid var(--borde);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.aviso-sincronia[hidden] {
+  display: none;
+}
+
+.aviso-sincronia .boton-chico {
+  min-height: 32px;
+}
+
+/* La tablatura está en otra afinación que la guitarra */
+.aviso-afinacion-tab {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--acento);
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: var(--acento);
+}
+
+.aviso-afinacion-tab[hidden] {
+  display: none;
+}
+
+.aviso-afinacion-tab span {
+  flex: 1;
+}
+
+/* Metrónomo visual: un destello en todo el borde de la pantalla */
+.destello {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 70px 10px rgba(245, 184, 61, 0.55);
+}
+
+.destello.tiempo {
+  animation: destello-tiempo 0.22s ease-out;
+}
+
+.destello.primero {
+  animation: destello-primero 0.32s ease-out;
+}
+
+@keyframes destello-tiempo {
+  from { opacity: 0.45; }
+  to { opacity: 0; }
+}
+
+@keyframes destello-primero {
+  from { opacity: 1; background: rgba(245, 184, 61, 0.1); }
+  to { opacity: 0; background: transparent; }
+}
+
+/* Notas de la canción */
+#texto-notas {
+  width: 100%;
+  min-height: 160px;
+  padding: 10px;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  background: #0b0d10;
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+
+/* Entrenador: los cuatro valores en dos columnas */
+.campos-entrenador {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.campos-entrenador input {
+  width: 100%;
+}
+
+/* Cursor de la tablatura: una cápsula que encierra la columna de notas que
+   suena, con un puntito arriba, en el amarillo de la app y un brillo suave
+   (tablaturas.js la ubica). La línea de alphaTab queda invisible. */
+.caja-tabs .at-cursor-beat {
+  opacity: 0;
+}
+
+.capsula-cursor {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  border: 2px solid var(--acento);
+  border-radius: 999px;
+  background: rgba(245, 184, 61, 0.12);
+  box-shadow: 0 0 10px rgba(245, 184, 61, 0.55), inset 0 0 8px rgba(245, 184, 61, 0.3);
+  transition: left 0.08s linear;
+}
+
+.capsula-cursor::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--acento);
+  box-shadow: 0 0 6px rgba(245, 184, 61, 0.9);
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .barra-bucle {
+    position: fixed;
+    z-index: 42;
+    left: 50%;
+    bottom: 42px;
+    transform: translateX(-50%);
+  }
+
+  .vista-tabs .aviso-afinacion-tab {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
+
+body.modo-tocar .barra-bucle {
+  position: fixed;
+  z-index: 42;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+}
+
+.barra-bucle {
+  align-self: center;
+}
+
+.barra-bucle select[hidden] {
+  display: none;
+}
+
+/* Modo tocar: la barra del bucle se esconde junto con los controles */
+body.modo-tocar .barra-bucle {
+  transition: opacity 0.3s;
+}
+
+body.modo-tocar.controles-ocultos .barra-bucle {
+  opacity: 0;
+  pointer-events: none;
+}

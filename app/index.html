@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=3.4">
+  <link rel="stylesheet" href="style.css?v=3.5">
 </head>
 <body>
 
@@ -169,6 +169,21 @@
     <!-- Aviso de transporte, cejilla o afinación activos ("Cejilla 4 · formas de C") -->
     <p id="indicador-acordes" class="indicador-acordes" hidden></p>
 
+    <!-- Bucle activo: cuántos compases, bucles guardados, guardar, entrenador y sacar (bucles.js) -->
+    <div id="barra-bucle" class="barra-bucle" hidden>
+      <span id="texto-bucle" class="texto-bucle">Bucle</span>
+      <select id="bucles-guardados" aria-label="Bucles guardados"></select>
+      <button id="guardar-bucle" class="boton boton-chico" type="button">Guardar</button>
+      <button id="boton-entrenador" class="boton boton-chico" type="button" aria-pressed="false">Entrenador</button>
+      <button id="sacar-bucle" class="boton boton-chico" type="button" aria-label="Sacar el bucle">✕</button>
+    </div>
+
+    <!-- Al deslizar una vista para mirar otra parte, deja de seguir a la canción (seguir.js) -->
+    <div id="aviso-sincronia" class="aviso-sincronia" role="status" hidden>
+      <span>Sincronización desactivada</span>
+      <button id="activar-sincronia" class="boton boton-chico boton-principal" type="button">Activar</button>
+    </div>
+
     <!-- ===== Vista de pulsos (tipo Chordify) ===== -->
     <div id="vista-pulsos" class="vista-pulsos">
       <!-- Aviso para canciones analizadas antes de que se guardaran los pulsos -->
@@ -203,6 +218,12 @@
     <div id="vista-tabs" class="vista-tabs" hidden>
       <!-- Avisos: sin tablatura, cargando, errores -->
       <p id="aviso-tabs" class="aviso-pulsos" hidden></p>
+
+      <!-- La tablatura está en otra afinación que la guitarra ("Afinación" en Más) -->
+      <p id="aviso-afinacion-tab" class="aviso-afinacion-tab" hidden>
+        <span id="texto-afinacion-tab"></span>
+        <button id="ajustar-afinacion-tab" class="boton boton-chico boton-principal" type="button">Ajustar</button>
+      </p>
 
       <!-- Acá alphaTab dibuja las tablaturas; se desplaza sola siguiendo lo que suena -->
       <div id="caja-tabs" class="caja-tabs"><div id="tabs"></div></div>
@@ -287,9 +308,14 @@
                 aria-label="Metrónomo" aria-pressed="false" title="Metrónomo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6l4 18H5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M12 16 17 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="16" r="1.8"/></svg>
         </button>
-        <!-- Bucle A–B: marca el compás de inicio, después el final, y repite (practica.js) -->
+        <!-- Velocidad: muestra la actual y abre una cajita con − y + (sin abrir "Más") -->
+        <button id="boton-velocidad" class="boton boton-icono boton-velocidad" type="button"
+                aria-label="Velocidad" aria-haspopup="dialog" aria-expanded="false">x1</button>
+        <!-- Bucle: lo arma en el compás que suena, con manijas para correr el inicio y el fin (bucles.js) -->
         <button id="boton-bucle" class="boton boton-icono boton-bucle" type="button"
-                aria-label="Bucle A–B: marcar el inicio" aria-pressed="false" title="Bucle A–B">A–B</button>
+                aria-label="Bucle" aria-pressed="false" title="Bucle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l3 3-3 3M20 5H8a4 4 0 0 0-4 4v2M7 22l-3-3 3-3M4 19h12a4 4 0 0 0 4-4v-2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
         <!-- Panel de opciones (velocidad, ajuste, volúmenes...), con un resumen (x1.25) -->
         <button id="boton-mas" class="boton boton-icono boton-mas" type="button" aria-label="Más opciones">
           <span>Más</span>
@@ -314,6 +340,17 @@
     <!-- Modo tocar: botón para salir (se esconde con los controles) -->
     <button id="salir-modo-tocar" class="boton boton-chico salir-modo-tocar" type="button" hidden>✕ Salir</button>
   </section>
+
+  <!-- Metrónomo visual: destello suave en cada tiempo -->
+  <div id="destello" class="destello" aria-hidden="true"></div>
+
+  <!-- Velocidad: la cajita flotante del botón "x1" -->
+  <div id="caja-velocidad" class="caja-velocidad" role="dialog" aria-label="Velocidad" hidden>
+    <button id="caja-vel-menos" type="button" aria-label="Más lento">−</button>
+    <output id="caja-vel-valor">x1</output>
+    <button id="caja-vel-mas" type="button" aria-label="Más rápido">+</button>
+    <button id="caja-vel-normal" class="boton-lista boton-renombrar" type="button">x1</button>
+  </div>
 
   <!-- Cuenta "3, 2, 1" antes de tocar: el número grande en el medio -->
   <div id="cuenta-entrada" class="cuenta-entrada" aria-live="assertive" hidden></div>
@@ -364,6 +401,8 @@
         </select>
         <!-- Intro, estrofas, estribillo...: detectarlas, pegarlas de un cifrado o renombrarlas -->
         <button id="boton-partes" class="boton boton-chico" type="button">Partes de la canción</button>
+        <!-- Apuntes de la canción (pastilla, preset, partes difíciles); van en Exportar JSON -->
+        <button id="boton-notas" class="boton boton-chico" type="button">✎ Notas</button>
         <!-- Solo aparece si la canción fue editada -->
         <button id="boton-restaurar" class="boton boton-chico" type="button" hidden>Restaurar análisis original</button>
       </div>
@@ -444,10 +483,22 @@
           <span>Reproducción continua <small>(sigue con la próxima)</small></span>
         </label>
 
-        <!-- Antes de arrancar (y en cada vuelta del bucle A–B), un compás de metrónomo -->
+        <!-- Antes de arrancar (y en cada vuelta del bucle), un compás de metrónomo -->
         <label class="interruptor">
           <input type="checkbox" id="cuenta-previa">
           <span>Cuenta “3, 2, 1” <small>(un compás antes de tocar)</small></span>
+        </label>
+
+        <!-- Metrónomo visual: un destello en cada tiempo (aparte del sonido) -->
+        <label class="interruptor">
+          <input type="checkbox" id="metronomo-visual">
+          <span>Destello en cada tiempo <small>(sin sonido también)</small></span>
+        </label>
+
+        <!-- Vibración en cada tiempo (solo celulares Android) -->
+        <label class="interruptor" id="fila-vibracion">
+          <input type="checkbox" id="metronomo-vibracion">
+          <span>Vibrar en cada tiempo <small>(Android)</small></span>
         </label>
       </div>
 
@@ -535,6 +586,11 @@
           <option value="horizontal">Acostado, con la tablatura</option>
           <option value="vertical">Parado, a pantalla completa</option>
         </select>
+      </label>
+      <!-- Solo si la tablatura está en otra afinación que la guitarra (Más → Afinación) -->
+      <label class="interruptor" id="fila-ajuste-afinacion-tab" hidden>
+        <input type="checkbox" id="ajuste-afinacion-tab">
+        <span>Pasar la tablatura a la afinación de mi guitarra</span>
       </label>
       <label class="interruptor">
         <input type="checkbox" id="mastil-efectos-reducidos">
@@ -641,6 +697,35 @@
     </form>
   </dialog>
 
+  <!-- Notas de la canción -->
+  <dialog id="dialogo-notas" class="dialogo hoja" aria-label="Notas de la canción">
+    <div class="hoja-contenido">
+      <h2>Notas</h2>
+      <textarea id="texto-notas" rows="8" spellcheck="true"
+                placeholder="Pastilla del puente, preset 12 de la pedalera, ojo con el solo del final…"></textarea>
+      <p class="ayuda">Se guardan solas con la canción y van incluidas en “Exportar JSON”.</p>
+      <button id="cerrar-notas" class="boton boton-principal" type="button">Listo</button>
+    </div>
+  </dialog>
+
+  <!-- Entrenador de velocidad: el bucle arranca lento y va subiendo -->
+  <dialog id="dialogo-entrenador" class="dialogo">
+    <form method="dialog">
+      <h2>Entrenador de velocidad</h2>
+      <p class="ayuda">El bucle arranca a la velocidad inicial, se repite las veces que digas y sube de a un paso hasta la velocidad final.</p>
+      <div class="campos-entrenador">
+        <label class="campo">Empieza en (%) <input type="number" id="entrenador-inicio" min="30" max="200" step="5" value="70"></label>
+        <label class="campo">Vueltas por paso <input type="number" id="entrenador-veces" min="1" max="20" step="1" value="3"></label>
+        <label class="campo">Sube de a (%) <input type="number" id="entrenador-paso" min="1" max="50" step="1" value="5"></label>
+        <label class="campo">Hasta (%) <input type="number" id="entrenador-final" min="30" max="200" step="5" value="100"></label>
+      </div>
+      <div class="dialogo-botones">
+        <button class="boton" type="submit" value="apagar">Apagar</button>
+        <button class="boton boton-principal" type="submit" value="empezar">Empezar</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Sugerencias con los nombres de las listas existentes (las usan los dos campos de lista) -->
   <datalist id="sugerencias-listas"></datalist>
 
@@ -650,24 +735,26 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=3.4"></script>
-  <script src="acordes.js?v=3.4"></script>
-  <script src="diagrama.js?v=3.4"></script>
-  <script src="biblioteca.js?v=3.4"></script>
-  <script src="analizador.js?v=3.4"></script>
-  <script src="app.js?v=3.4"></script>
-  <script src="editor.js?v=3.4"></script>
+  <script src="acordes-extra.js?v=3.5"></script>
+  <script src="acordes.js?v=3.5"></script>
+  <script src="diagrama.js?v=3.5"></script>
+  <script src="biblioteca.js?v=3.5"></script>
+  <script src="analizador.js?v=3.5"></script>
+  <script src="app.js?v=3.5"></script>
+  <script src="editor.js?v=3.5"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=3.4"></script>
-  <script src="mastil.js?v=3.4"></script>
-  <script src="sincronizar-solo.js?v=3.4"></script>
+  <script src="tablaturas.js?v=3.5"></script>
+  <script src="mastil.js?v=3.5"></script>
+  <script src="sincronizar-solo.js?v=3.5"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=3.4"></script>
+  <script src="acordes-tablatura.js?v=3.5"></script>
   <!-- Grilla por vueltas y partes de la canción -->
-  <script src="grilla.js?v=3.4"></script>
-  <script src="partes.js?v=3.4"></script>
+  <script src="grilla.js?v=3.5"></script>
+  <script src="partes.js?v=3.5"></script>
   <!-- Canciones desde archivos de Guitar Pro con el audio adentro -->
-  <script src="guitar-pro.js?v=3.4"></script>
-  <script src="practica.js?v=3.4"></script>
+  <script src="guitar-pro.js?v=3.5"></script>
+  <script src="practica.js?v=3.5"></script>
+  <script src="seguir.js?v=3.5"></script>
+  <script src="bucles.js?v=3.5"></script>
 </body>
 </html>

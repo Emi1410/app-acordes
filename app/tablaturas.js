@@ -279,6 +279,20 @@ async function mostrarVistaTabs() {
    alphaTab: configuración (tema oscuro, solo tablatura, audio externo)
    ------------------------------------------------------------------ */
 
+// Cuándo se tocó la tablatura por última vez (sin deslizar): solo después
+// de un toque se acepta que alphaTab mueva la canción.
+let ultimoToqueTabs = -1e9;
+let inicioToqueTabs = null;
+// (en la fase de captura: antes de que alphaTab reciba el mismo toque)
+cajaTabs.addEventListener("pointerdown", (evento) => { inicioToqueTabs = { x: evento.clientX, y: evento.clientY }; }, true);
+cajaTabs.addEventListener("pointerup", (evento) => {
+  if (inicioToqueTabs && Math.hypot(evento.clientX - inicioToqueTabs.x, evento.clientY - inicioToqueTabs.y) < 12) {
+    ultimoToqueTabs = performance.now();
+  }
+  inicioToqueTabs = null;
+}, true);
+cajaTabs.addEventListener("pointercancel", () => { inicioToqueTabs = null; }, true);
+
 function crearApiTabs() {
   if (apiTabs) return;
   apiTabs = new alphaTab.AlphaTabApi(contenedorTabs, {
@@ -305,7 +319,7 @@ function crearApiTabs() {
       enableCursor: true,
       enableAnimatedBeatCursor: true,
       enableUserInteraction: true,                            // tocar una nota salta a ese lugar del mp3
-      scrollMode: alphaTab.ScrollMode.Continuous,
+      scrollMode: vistaSincronizada ? alphaTab.ScrollMode.Continuous : alphaTab.ScrollMode.Off,
       scrollElement: cajaTabs,
       scrollOffsetY: margenCursor(),
       scrollOffsetX: modoTocar ? DESPLAZAMIENTO_TOCAR : 0,
@@ -315,6 +329,8 @@ function crearApiTabs() {
 
   apiTabs.scoreLoaded.on(alCargarPartitura);
   apiTabs.renderFinished.on(() => {
+    ubicarCapsula(pulsoDeLaCapsula);
+    alRedibujarVista();      // los corchetes del bucle siguen a la tablatura (bucles.js)
     if (!tabsListas) return;
     mostrarAvisoTabs("");
     llevarVistaAlCursor();   // al terminar de dibujar (también después de un zoom), mostrar el cursor
@@ -327,9 +343,17 @@ function crearApiTabs() {
       set playbackRate(valor) {},           // la velocidad la maneja la app
       get masterVolume() { return 1; },
       set masterVolume(valor) {},           // alphaTab no suena
-      seekTo(ms) { audio.currentTime = Math.max(0, ms / 1000); },
-      play() { if (audio.paused) reproducirCancion(); },
-      pause() { if (!audio.paused) audio.pause(); },
+      // Solo se mueve el mp3 si fue un toque en la tablatura (una nota o un
+      // compás). alphaTab también "salta" solo al cargar la partitura o al
+      // aplicar la sincronización (a 0:00, y pausando): eso se ignora, así la
+      // canción sigue sonando al cambiar de vista.
+      seekTo(ms) {
+        if (performance.now() - ultimoToqueTabs > 1500) return;
+        audio.currentTime = Math.max(0, ms / 1000);
+        alTocarParaSaltar();   // la vista vuelve a seguir a la canción (seguir.js)
+      },
+      play() {},     // play y pausa los maneja la app (alphaTab solo los imita)
+      pause() {},
     };
     reproductorTabsListo = true;
     revisarTabsListas();
@@ -370,10 +394,14 @@ function alCargarPartitura(partitura) {
 
   tiemposPartitura = calcularTiemposPartitura(partitura);
   pintarPistas(partitura);
+  guardarTrastesOriginales(partitura);
+  prepararPulsosCapsula(partitura);
+  moverTrastes(partitura);     // transporte y afinación (ver "Transportar la tablatura")
   dibujarPistas();
   prepararMastil(partitura);   // el diapasón con las notas que suenan (mastil.js)
   mostrarSync();
   partituraLista = true;
+  mostrarAvisoAfinacionTab();
   revisarTabsListas();
 }
 
@@ -585,12 +613,249 @@ borrarPuntos.addEventListener("click", () => {
 });
 
 /* ------------------------------------------------------------------
+   Cursor tipo cápsula
+
+   En lugar de la línea de alphaTab (que queda invisible), un óvalo
+   alargado que encierra la columna de notas que suena, con un puntito
+   arriba. En cada cuadro se busca el pulso de la Guitarra 1 que suena
+   (también en pausa, al saltar) y la cápsula se ubica sobre él, con sus
+   medidas en el dibujo, dentro de la caja de la tablatura: así se
+   desplaza junto con ella.
+   ------------------------------------------------------------------ */
+
+const capsula = document.createElement("div");
+capsula.className = "capsula-cursor";
+capsula.setAttribute("aria-hidden", "true");
+let pulsoDeLaCapsula = null;
+let pulsosDeLaGuitarra1 = [];   // [{ ms (de la partitura), pulso }], en orden
+
+// Los pulsos de la Guitarra 1 con su momento (al cargar o cambiar de pista).
+function prepararPulsosCapsula(partitura) {
+  const msDeTick = crearMapaDeTempo(partitura);
+  const pista = partitura.tracks[pistasElegidas[0]];
+  pulsosDeLaGuitarra1 = [];
+  if (!pista) return;
+  for (const compas of pista.staves[0].bars) {
+    for (const pulso of compas.voices[0].beats) pulsosDeLaGuitarra1.push({ ms: msDeTick(pulso.absolutePlaybackStart), pulso });
+  }
+  pulsosDeLaGuitarra1.sort((a, b) => a.ms - b.ms);
+}
+
+// El pulso que suena en "ms" de la partitura (el último que ya empezó).
+function pulsoQueSuena(ms) {
+  let bajo = 0, alto = pulsosDeLaGuitarra1.length - 1, k = -1;
+  while (bajo <= alto) {
+    const medio = (bajo + alto) >> 1;
+    if (pulsosDeLaGuitarra1[medio].ms <= ms + 1) { k = medio; bajo = medio + 1; } else alto = medio - 1;
+  }
+  return k >= 0 ? pulsosDeLaGuitarra1[k].pulso : null;
+}
+
+function ubicarCapsula(pulso) {
+  pulsoDeLaCapsula = pulso;
+  const medidas = pulso && apiTabs && apiTabs.renderer.boundsLookup ? apiTabs.renderer.boundsLookup.findBeat(pulso) : null;
+  const superficie = contenedorTabs.querySelector(".at-surface");
+  if (!medidas || !superficie) {
+    capsula.remove();
+    return;
+  }
+  if (capsula.parentElement !== cajaTabs) cajaTabs.appendChild(capsula);
+  const caja = cajaTabs.getBoundingClientRect(), dibujo = superficie.getBoundingClientRect();
+  const origenX = dibujo.left - caja.left + cajaTabs.scrollLeft;
+  const origenY = dibujo.top - caja.top + cajaTabs.scrollTop;
+  const renglon = medidas.barBounds.realBounds;
+  const x = medidas.onNotesX || medidas.visualBounds.x + medidas.visualBounds.w / 2;
+  const ancho = Math.max(18, Math.min(24, medidas.visualBounds.w + 6));
+  capsula.style.left = `${origenX + x - ancho / 2}px`;
+  capsula.style.width = `${ancho}px`;
+  capsula.style.top = `${origenY + renglon.y + 4}px`;
+  capsula.style.height = `${Math.max(20, renglon.h - 8)}px`;
+}
+
+/* ------------------------------------------------------------------
+   Transportar la tablatura (y el mástil)
+
+   El transporte (Más → Transportar) corre también los números de traste:
+   cada nota pasa a sonar "transporte" semitonos más arriba o abajo. Si
+   una nota queda por debajo del traste 0, se busca dónde queda más
+   cómoda: la misma nota en la cuerda vecina más grave, o una octava
+   arriba en la misma cuerda (lo más cerca de las otras notas del pulso).
+
+   Afinación: si la tablatura está en otra afinación que la guitarra
+   (Más → Afinación), por ejemplo el .gp en Eb y la guitarra en estándar,
+   se avisa y con "Ajustar" se pasa a la afinación de la guitarra: los
+   trastes se corren para que suene igual (se recuerda por canción).
+
+   Se cambia el modelo de alphaTab (note.fret, note.string y la afinación
+   del pentagrama); lo original queda guardado en cada nota para volver.
+   ------------------------------------------------------------------ */
+
+const ESTANDAR = [64, 59, 55, 50, 45, 40];     // E B G D A E (de la 1ª a la 6ª)
+const TRASTE_MAXIMO = 24;
+const avisoAfinacionTab = document.getElementById("aviso-afinacion-tab");
+const textoAfinacionTab = document.getElementById("texto-afinacion-tab");
+const botonAjustarAfinacionTab = document.getElementById("ajustar-afinacion-tab");
+const casillaAjusteAfinacionTab = document.getElementById("ajuste-afinacion-tab");
+const filaAjusteAfinacionTab = document.getElementById("fila-ajuste-afinacion-tab");
+
+// Guarda el traste, la cuerda y la afinación con que vino el archivo (una sola vez).
+function guardarTrastesOriginales(partitura) {
+  for (const pista of partitura.tracks) {
+    for (const pentagrama of pista.staves) {
+      if (!pentagrama.afinacionOriginal) pentagrama.afinacionOriginal = pentagrama.tuning.slice();
+      for (const compas of pentagrama.bars) {
+        for (const voz of compas.voices) {
+          for (const pulso of voz.beats) {
+            for (const nota of pulso.notes) {
+              if (nota.trasteOriginal === undefined) { nota.trasteOriginal = nota.fret; nota.cuerdaOriginal = nota.string; }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// Cuántos semitonos está la afinación de un pentagrama respecto de la
+// estándar, si todas las cuerdas están corridas igual (Eb = -1, D = -2);
+// null si es otra (Drop D, 7 cuerdas...).
+function corrimientoDeAfinacion(afinacionPentagrama) {
+  if (!afinacionPentagrama || afinacionPentagrama.length !== 6) return null;
+  const d = afinacionPentagrama[0] - ESTANDAR[0];
+  return afinacionPentagrama.every((a, i) => a - ESTANDAR[i] === d) ? d : null;
+}
+
+const NOMBRE_CORRIMIENTO = {
+  "-3": "C#, un tono y medio abajo", "-2": "D, un tono abajo", "-1": "Eb, medio tono abajo",
+  0: "afinación estándar", 1: "F, medio tono arriba",
+};
+
+// La afinación de la Guitarra 1 tal como viene en el archivo.
+function afinacionDeLaTab() {
+  const pista = apiTabs && apiTabs.score ? apiTabs.score.tracks[pistasElegidas[0]] : null;
+  const pentagrama = pista ? pista.staves[0] : null;
+  return pentagrama && !pentagrama.isPercussion ? corrimientoDeAfinacion(pentagrama.afinacionOriginal || pentagrama.tuning) : null;
+}
+
+const tabAjustadaAAfinacion = () => !!(cancionActual && cancionActual.tabAjusteAfinacion);
+
+// ¿El modelo está distinto del archivo? (entonces no sirve para calcular acordes)
+function tablaturaMovida() {
+  return transporte !== 0 || tabAjustadaAAfinacion();
+}
+
+// Mueve todas las notas según el transporte y (si se ajustó) la afinación de la guitarra.
+function moverTrastes(partitura) {
+  for (const pista of partitura.tracks) {
+    for (const pentagrama of pista.staves) {
+      if (pentagrama.isPercussion || !pentagrama.afinacionOriginal || !pentagrama.afinacionOriginal.length) continue;
+      const original = pentagrama.afinacionOriginal;
+      // La afinación en la que se lee: la del archivo o, ajustada, la elegida en "Afinación".
+      const afinacionGuitarra = tabAjustadaAAfinacion() && corrimientoDeAfinacion(original) !== null
+        ? ESTANDAR.map((a) => a + afinacion)
+        : original;
+      afinacionGuitarra.forEach((a, i) => { pentagrama.tuning[i] = a; });
+      const cuerdas = original.length;
+      for (const compas of pentagrama.bars) {
+        for (const voz of compas.voices) {
+          for (const pulso of voz.beats) moverPulso(pulso, original, afinacionGuitarra, cuerdas);
+        }
+      }
+    }
+  }
+}
+
+// Las notas de un pulso: cada una a la altura nueva, en la cuerda y traste más cómodos.
+function moverPulso(pulso, original, guitarra, cuerdas) {
+  if (!pulso.notes.length) return;
+  const alturaDeCuerda = (afinacionCuerdas, cuerda) => afinacionCuerdas[cuerdas - cuerda];   // cuerda 1 = la más grave
+  // Primero cada nota en su misma cuerda; las que quedan fuera del diapasón, después.
+  const planes = pulso.notes.map((nota) => {
+    if (nota.trasteOriginal === undefined || nota.cuerdaOriginal < 1 || nota.cuerdaOriginal > cuerdas) return null;
+    const altura = alturaDeCuerda(original, nota.cuerdaOriginal) + nota.trasteOriginal + transporte;
+    return { nota, altura, cuerda: nota.cuerdaOriginal, traste: altura - alturaDeCuerda(guitarra, nota.cuerdaOriginal) };
+  });
+  const entra = (plan) => plan.traste >= 0 && plan.traste <= TRASTE_MAXIMO;
+  const validos = planes.filter((p) => p && entra(p));
+  const usadas = new Set(validos.map((p) => p.cuerda));
+  const referencia = validos.length ? validos.reduce((suma, p) => suma + p.traste, 0) / validos.length : null;
+  for (const plan of planes) {
+    if (!plan || entra(plan)) continue;
+    const opciones = [];
+    if (plan.traste < 0) {
+      // La misma nota en la cuerda vecina más grave (o la siguiente), o una octava arriba en la misma cuerda.
+      for (const cuerda of [plan.cuerda - 1, plan.cuerda - 2]) {
+        if (cuerda < 1 || usadas.has(cuerda)) continue;
+        const traste = plan.altura - alturaDeCuerda(guitarra, cuerda);
+        if (traste >= 0 && traste <= TRASTE_MAXIMO) opciones.push({ cuerda, traste, extra: cuerda === plan.cuerda - 1 ? 0 : 3 });
+      }
+      opciones.push({ cuerda: plan.cuerda, traste: plan.traste + 12, extra: 1 });
+    } else {
+      opciones.push({ cuerda: plan.cuerda, traste: plan.traste - 12, extra: 0 });
+    }
+    // La más cómoda: la más cerca de las otras notas del pulso (o del traste que tenía).
+    const cerca = referencia ?? plan.nota.trasteOriginal;
+    const costo = (o) => Math.abs(o.traste - cerca) + o.extra;
+    const elegida = opciones.filter((o) => o.traste >= 0).sort((a, b) => costo(a) - costo(b))[0];
+    if (!elegida) continue;
+    plan.cuerda = elegida.cuerda;
+    plan.traste = elegida.traste;
+    usadas.add(elegida.cuerda);
+  }
+  for (const plan of planes) {
+    if (!plan) continue;
+    plan.nota.string = plan.cuerda;
+    plan.nota.fret = Math.max(0, plan.traste);
+  }
+  // alphaTab busca las notas de un pulso por cuerda y por altura: se rearman.
+  pulso.noteStringLookup.clear();
+  pulso.noteValueLookup.clear();
+  for (const nota of pulso.notes) {
+    if (nota.isStringed) pulso.noteStringLookup.set(nota.string, nota);
+    pulso.noteValueLookup.set(nota.realValue, nota);
+  }
+}
+
+// Se llama al cambiar el transporte o la afinación (app.js): se vuelve a dibujar todo.
+function transportarTablatura() {
+  mostrarAvisoAfinacionTab();
+  if (!apiTabs || !apiTabs.score || !partituraLista) return;
+  moverTrastes(apiTabs.score);
+  dibujarPistas();
+  prepararMastil(apiTabs.score);
+}
+
+// "La tablatura está en Eb, medio tono abajo": si no coincide con la guitarra.
+function mostrarAvisoAfinacionTab() {
+  const deLaTab = partituraLista ? afinacionDeLaTab() : null;
+  const distinta = deLaTab !== null && deLaTab !== afinacion;
+  filaAjusteAfinacionTab.hidden = !distinta;
+  casillaAjusteAfinacionTab.checked = tabAjustadaAAfinacion();
+  avisoAfinacionTab.hidden = !distinta || tabAjustadaAAfinacion();
+  if (!distinta) return;
+  const guitarra = NOMBRE_CORRIMIENTO[afinacion] || "otra afinación";
+  textoAfinacionTab.textContent = `La tablatura está en ${NOMBRE_CORRIMIENTO[deLaTab] || "otra afinación"}; tu guitarra, en ${guitarra}.`;
+}
+
+function cambiarAjusteAfinacionTab(ajustar) {
+  if (idActual === null) return;
+  cancionActual = { ...cancionActual, tabAjusteAfinacion: ajustar };
+  actualizarCancion(idActual, { tabAjusteAfinacion: ajustar }).catch(() => {});
+  transportarTablatura();
+  if (ajustar) mostrarMensaje("Tablatura pasada a la afinación de tu guitarra");
+}
+botonAjustarAfinacionTab.addEventListener("click", () => cambiarAjusteAfinacionTab(true));
+casillaAjusteAfinacionTab.addEventListener("change", () => cambiarAjusteAfinacionTab(casillaAjusteAfinacionTab.checked));
+
+/* ------------------------------------------------------------------
    Seguir al mp3 (se llama desde actualizar() en app.js)
    ------------------------------------------------------------------ */
 
 function actualizarTabs() {
   if (!tabsListas || vistaTabs.hidden || tabsDeCancion !== idActual) return;
   apiTabs.player.output.updatePosition(msQueSuena());
+  const pulso = pulsoQueSuena(msPartituraAhora());
+  if (pulso !== pulsoDeLaCapsula) ubicarCapsula(pulso);
   actualizarMastil();   // ilumina en el mástil las notas que suenan (mastil.js)
 }
 
@@ -601,6 +866,6 @@ audio.addEventListener("pause", () => { if (tabsListas) apiTabs.pause(); });
 // no desplaza la vista: se lo pedimos, para que se vea dónde quedó.
 function llevarVistaAlCursor() {
   actualizarTabs();
-  if (tabsListas && !vistaTabs.hidden && audio.paused) setTimeout(() => apiTabs.scrollToCursor(), 60);
+  if (tabsListas && !vistaTabs.hidden && audio.paused && vistaSincronizada) setTimeout(() => apiTabs.scrollToCursor(), 60);
 }
 audio.addEventListener("seeked", llevarVistaAlCursor);

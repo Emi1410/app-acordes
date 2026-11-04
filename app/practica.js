@@ -15,9 +15,9 @@
        no hace nada más);
      - "Salir" (o el gesto de atrás) devuelve todo como estaba.
 
-   Bucle A–B (botón "A–B" del transporte):
-     - primer toque: el inicio es el compás que suena; segundo toque: el
-       final es el fin del compás que suena; tercero: se saca el bucle;
+   Bucle (botón con las flechas del transporte):
+     - un toque lo arma en el compás que suena; los corchetes (bucles.js)
+       corren el inicio y el fin de a pulso; otro toque lo saca;
      - o con los dedos: mantener apretado un compás de la tira de Pulsos
        o de la tablatura marca el inicio, y tocar otro marca el final;
      - se revisa en cada cuadro con la posición que se escucha, así que
@@ -216,7 +216,10 @@ function programarOcultarControles() {
   clearTimeout(temporizadorControles);
   if (!modoTocar) return;
   temporizadorControles = setTimeout(() => {
-    if (modoTocar && quiereSonar()) document.body.classList.add("controles-ocultos");
+    if (modoTocar && quiereSonar()) {
+      document.body.classList.add("controles-ocultos");
+      cerrarCajaVelocidad();   // la cajita de la velocidad se va con los controles
+    }
   }, ESPERA_OCULTAR_MS);
 }
 
@@ -360,6 +363,7 @@ function cancelarCuenta() {
 // Otra canción: sin cuenta pendiente ni bucle.
 audio.addEventListener("loadstart", () => {
   cancelarCuenta();
+  entrenador.activo = false;   // (bucles.js) sin volver a la velocidad de la canción anterior
   sacarBucle();
 });
 
@@ -399,7 +403,7 @@ function marcarInicio([inicio, fin]) {
   bucleAB.a = inicio;
   bucleAB.finA = fin;
   mostrarBucle();
-  mostrarMensaje("Inicio del bucle marcado: tocá el compás final (o A–B)");
+  mostrarMensaje("Inicio del bucle marcado: tocá el compás final");
 }
 
 function marcarFinal([inicio, fin], saltar) {
@@ -412,8 +416,8 @@ function marcarFinal([inicio, fin], saltar) {
   mostrarBucle();
   const compases = pulsos.filter((p, i) => esCompas[i] && p + ajuste >= a - 0.03 && p + ajuste < b - 0.03).length;
   mostrarMensaje(compases > 0
-    ? `Bucle de ${compases === 1 ? "1 compás" : `${compases} compases`} · A–B lo saca`
-    : "Bucle armado · A–B lo saca");
+    ? `Bucle de ${compases === 1 ? "1 compás" : `${compases} compases`} · arrastrá los corchetes para ajustarlo`
+    : "Bucle armado");
   // Tocando un compás en la tira o la tablatura, la canción se va a él: se vuelve al inicio.
   if (saltar) setTimeout(() => { audio.currentTime = bucleAB.a; actualizar(); }, 80);
 }
@@ -424,12 +428,22 @@ function sacarBucle() {
   mostrarBucle();
 }
 
-// El botón: inicio en el compás que suena → final en el compás que suena → sin bucle.
+// El botón: arma el bucle en el compás que suena (con los corchetes para
+// ajustarlo) → lo saca. Si se estaba marcando con el dedo, el compás que
+// suena es el final.
 botonBucle.addEventListener("click", () => {
   const ahora = posicionQueSuena(true);
-  if (bucleAB.estado === "apagado") marcarInicio(compasDeTira(ahora));
-  else if (bucleAB.estado === "esperandoB") marcarFinal(compasDeTira(ahora), false);
-  else {
+  if (bucleAB.estado === "apagado") {
+    const [inicio, fin] = compasDeTira(ahora);
+    bucleAB.estado = "activo";
+    bucleAB.a = inicio;
+    bucleAB.b = fin;
+    bucleAB.finA = fin;
+    mostrarBucle();
+    mostrarMensaje("Bucle en este compás · arrastrá los corchetes para ajustarlo");
+  } else if (bucleAB.estado === "esperandoB") {
+    marcarFinal(compasDeTira(ahora), false);
+  } else {
     sacarBucle();
     mostrarMensaje("Sin bucle");
   }
@@ -439,12 +453,12 @@ function mostrarBucle() {
   const { estado } = bucleAB;
   botonBucle.setAttribute("aria-pressed", String(estado === "activo"));
   botonBucle.classList.toggle("esperando", estado === "esperandoB");
-  botonBucle.textContent = estado === "esperandoB" ? "A…" : "A–B";
-  const texto = estado === "apagado" ? "Bucle A–B: marcar el inicio"
-    : estado === "esperandoB" ? "Bucle A–B: marcar el final" : "Sacar el bucle A–B";
+  const texto = estado === "apagado" ? "Bucle en el compás que suena"
+    : estado === "esperandoB" ? "Bucle: marcar el final en el compás que suena" : "Sacar el bucle";
   botonBucle.setAttribute("aria-label", texto);
   botonBucle.title = texto;
   pintarBucleEnTira();
+  if (typeof alCambiarBucle === "function") alCambiarBucle();   // barra y corchetes (bucles.js)
 }
 
 // En la tira de Pulsos, los compases del bucle (o el del inicio, mientras se espera el final).
@@ -452,12 +466,14 @@ function pintarBucleEnTira() {
   const { estado } = bucleAB;
   const desde = bucleAB.a;
   const hasta = estado === "activo" ? bucleAB.b : bucleAB.finA;
-  const celdas = tira.children;
+  const celdas = tira.querySelectorAll(".pulso");
   for (let i = 0; i < celdas.length; i++) {
     const t = pulsos[i] + ajuste;
     const dentro = estado !== "apagado" && t >= desde - 0.03 && t < hasta - 0.03;
     celdas[i].classList.toggle("en-bucle", dentro);
   }
+  // La tira se volvió a dibujar: también las manijas (bucles.js).
+  if (typeof dibujarCorchetes === "function" && celdas.length && !celdas[0].parentElement.querySelector(".capa-bucle")) dibujarCorchetes();
 }
 
 // Se llama en cada cuadro (actualizar, en app.js): al pasar el fin de B, vuelve a A.
@@ -466,6 +482,7 @@ function revisarBucleAB() {
   const t = posicionQueSuena(true);
   // Solo si recién lo pasó: si se saltó a mano más allá del bucle, se respeta.
   if (t < bucleAB.b || t > bucleAB.b + 1.5) return;
+  vueltaDelEntrenador();   // el entrenador de velocidad cuenta la vuelta (bucles.js)
   if (cuentaPrevia) {
     audio.pause();
     audio.currentTime = bucleAB.a;

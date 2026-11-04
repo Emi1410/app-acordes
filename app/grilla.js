@@ -179,6 +179,7 @@ function dibujarGrillaVueltas() {
     }
     lista.appendChild(seccion);
   }
+  if (typeof alRedibujarVista === "function") alRedibujarVista();   // corchetes del bucle (bucles.js)
 }
 
 // Un casillero: el compás con sus trozos (cada uno del ancho de los pulsos que dura).
@@ -260,7 +261,8 @@ function actualizarGrillaVueltas() {
   }
   // La vuelta que suena queda en el medio de la grilla.
   const actual = lista.querySelector(".compas-grilla.actual");
-  if (actual && !lista.hidden) actual.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
+  // (salvo que el usuario la haya deslizado para mirar otra parte: seguir.js)
+  if (actual && !lista.hidden && vistaSincronizada) actual.parentElement.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 /* ------------------------------------------------------------------

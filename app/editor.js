@@ -473,6 +473,7 @@ const botonRestaurar = document.getElementById("boton-restaurar");
 // "Restaurar análisis original" solo aparece si la canción fue editada.
 // Con los acordes de la tablatura, vuelve a los que se calcularon de ella.
 function mostrarOpcionesCancion() {
+  mostrarBotonNotas();
   botonRestaurar.hidden = !(cancionActual && cancionActual.editada && cancionActual.acordesOriginales);
   botonRestaurar.textContent = fuenteDe(cancionActual) === "tablatura" ? "Restaurar acordes de la tablatura" : "Restaurar análisis original";
 }
@@ -498,6 +499,8 @@ botonExportar.addEventListener("click", async () => {
     transporte: c.transporte, cejilla: c.cejilla, afinacion: c.afinacion,
     // Partes de la canción (Intro, Estrofa, Estribillo...)
     partes: Array.isArray(c.partes) && c.partes.length ? c.partes : undefined,
+    // Apuntes de la canción (pastilla, preset, partes difíciles)
+    notas: c.notas || undefined,
   };
   const archivo = new Blob([JSON.stringify(datos, null, 2)], { type: "application/json" });
   const enlace = document.createElement("a");
@@ -508,6 +511,46 @@ botonExportar.addEventListener("click", async () => {
   enlace.remove();
   setTimeout(() => URL.revokeObjectURL(enlace.href), 2000);
 });
+
+/* ------------------------------------------------------------------
+   Notas de la canción: se guardan solas mientras se escribe
+   ------------------------------------------------------------------ */
+
+const botonNotas = document.getElementById("boton-notas");
+const dialogoNotas = document.getElementById("dialogo-notas");
+const textoNotas = document.getElementById("texto-notas");
+let temporizadorNotas = null;
+let notasDe = null;          // id de la canción cuyas notas están en el cuadro
+
+function guardarNotas() {
+  clearTimeout(temporizadorNotas);
+  temporizadorNotas = null;
+  if (notasDe === null) return;
+  const notas = textoNotas.value;
+  if (cancionActual && cancionActual.id === notasDe) cancionActual = { ...cancionActual, notas };
+  actualizarCancion(notasDe, { notas }).catch(() => {});
+  mostrarBotonNotas();
+}
+
+// El botón dice si la canción ya tiene notas.
+function mostrarBotonNotas() {
+  const hay = !!(cancionActual && cancionActual.notas && cancionActual.notas.trim());
+  botonNotas.textContent = hay ? "✎ Notas •" : "✎ Notas";
+}
+
+botonNotas.addEventListener("click", () => {
+  if (idActual === null) return;
+  notasDe = idActual;
+  textoNotas.value = (cancionActual && cancionActual.notas) || "";
+  panelOpciones.close();
+  dialogoNotas.showModal();
+});
+textoNotas.addEventListener("input", () => {
+  clearTimeout(temporizadorNotas);
+  temporizadorNotas = setTimeout(guardarNotas, 600);
+});
+document.getElementById("cerrar-notas").addEventListener("click", () => dialogoNotas.close());
+dialogoNotas.addEventListener("close", guardarNotas);
 
 botonRestaurar.addEventListener("click", async () => {
   const deTablatura = fuenteDe(cancionActual) === "tablatura";

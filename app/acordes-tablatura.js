@@ -891,7 +891,8 @@ const selectorFuente = document.getElementById("selector-fuente");
 // La partitura de una canción: la de la vista Tabs si ya está cargada, o se
 // lee el archivo (sin dibujarlo).
 async function partituraDeCancion(id) {
-  if (apiTabs && apiTabs.score && tabsDeCancion === id && tabsListas) return apiTabs.score;
+  // (si la tablatura está transportada, los trastes ya no son los del archivo: se lee de nuevo)
+  if (apiTabs && apiTabs.score && tabsDeCancion === id && tabsListas && !tablaturaMovida()) return apiTabs.score;
   const tablatura = await obtenerTablatura(id);
   if (!tablatura) return null;
   await cargarAlphaTab();

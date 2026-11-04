@@ -482,7 +482,7 @@ function actualizarLeyendaParte(t) {
 // de cada parte, además, una marca (lo llama dibujarTira en app.js).
 function pintarPartesEnTira() {
   const partes = partesDeCancion();
-  const celdas = tira.children;
+  const celdas = tira.querySelectorAll(".pulso");
   let k = -1;
   for (let i = 0; i < celdas.length; i++) {
     const t = pulsos[i] + 0.02;

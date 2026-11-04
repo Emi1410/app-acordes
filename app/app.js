@@ -935,7 +935,8 @@ botonGuardar.addEventListener("click", async () => {
 // (velocidad, transporte, cejilla y afinación dentro de sus rangos).
 function preferenciasImportadas(datos) {
   const resultado = {};
-  if ([0.5, 0.75, 1, 1.25, 1.5, 2].includes(datos.velocidad)) resultado.velocidad = datos.velocidad;
+  if (typeof datos.velocidad === "number" && datos.velocidad >= 0.5 && datos.velocidad <= 2) resultado.velocidad = redondearVelocidad(datos.velocidad);
+  if (typeof datos.notas === "string") resultado.notas = datos.notas.slice(0, 20000);
   if (Number.isInteger(datos.transporte) && Math.abs(datos.transporte) <= 6) resultado.transporte = datos.transporte;
   if (Number.isInteger(datos.cejilla) && datos.cejilla >= 0 && datos.cejilla <= 9) resultado.cejilla = datos.cejilla;
   if ([0, -1, -2].includes(datos.afinacion)) resultado.afinacion = datos.afinacion;
@@ -1896,8 +1897,41 @@ function sonarClic(cuando, primerTiempo) {
   };
 }
 
+/* Metrónomo visual y vibración: se programan junto con los clics (aunque el
+   sonido esté apagado) y se disparan cuando el tiempo se escucha. */
+const destello = document.getElementById("destello");
+const casillaMetronomoVisual = document.getElementById("metronomo-visual");
+const casillaMetronomoVibracion = document.getElementById("metronomo-vibracion");
+let metronomoVisual = false;
+let metronomoVibracion = false;     // apagada si no se elige (solo anda en Android)
+try {
+  metronomoVisual = localStorage.getItem("metronomoVisual") === "si";
+  metronomoVibracion = localStorage.getItem("metronomoVibracion") === "si";
+} catch { /* apagados */ }
+let marcasProgramadas = [];         // temporizadores de los destellos que vienen
+
+// ¿Hay que marcar los tiempos de alguna forma (sonido, destello o vibración)?
+const marcaTiempos = () => metronomoPrendido || metronomoVisual || metronomoVibracion;
+
+// Un tiempo que se va a escuchar dentro de "segundos": destello y/o vibración.
+function marcarTiempo(segundos, primerTiempo) {
+  if (!metronomoVisual && !metronomoVibracion) return;
+  const temporizador = setTimeout(() => {
+    marcasProgramadas = marcasProgramadas.filter((t) => t !== temporizador);
+    if (metronomoVisual) {
+      destello.classList.remove("tiempo", "primero");
+      void destello.offsetWidth;   // reinicia la animación
+      destello.classList.add(primerTiempo ? "primero" : "tiempo");
+    }
+    if (metronomoVibracion && navigator.vibrate) navigator.vibrate(primerTiempo ? 45 : 20);
+  }, Math.max(0, segundos * 1000));
+  marcasProgramadas.push(temporizador);
+}
+
 // Cancela los clics ya programados y hace que se recalcule desde la posición actual.
 function reiniciarMetronomo() {
+  for (const temporizador of marcasProgramadas) clearTimeout(temporizador);
+  marcasProgramadas = [];
   proximoPulsoMetronomo = null;
   for (const oscilador of clicsProgramados) {
     try {
@@ -1910,7 +1944,7 @@ function reiniciarMetronomo() {
 }
 
 function programarMetronomo() {
-  if (!metronomoPrendido || audio.paused || audio.seeking || pulsos.length === 0) return;
+  if (!marcaTiempos() || audio.paused || audio.seeking || pulsos.length === 0) return;
   if (!contextoAudio || contextoAudio.state !== "running") return;
 
   const velocidad = audio.playbackRate;
@@ -1930,7 +1964,11 @@ function programarMetronomo() {
     const i = proximoPulsoMetronomo;
     const cuando = ahora + (pulsos[i] + corrimiento - posicion) / velocidad;
     if (cuando > ahora + ADELANTO_METRONOMO) break;      // todavía falta: lo programamos después
-    if (cuando >= ahora - 0.02) sonarClic(Math.max(cuando, ahora), esCompas[i]);
+    if (cuando >= ahora - 0.02) {
+      if (metronomoPrendido) sonarClic(Math.max(cuando, ahora), esCompas[i]);
+      // El destello, cuando el tiempo sale por el parlante (con la latencia de salida).
+      marcarTiempo(cuando - ahora + latenciaSalida(), esCompas[i]);
+    }
     proximoPulsoMetronomo++;
   }
 }
@@ -1956,13 +1994,32 @@ botonMetronomo.addEventListener("click", () => {
   metronomoPrendido = !metronomoPrendido;
   mostrarMetronomo();
   guardarPreferencias();
-  if (metronomoPrendido) {
+  revisarMetronomo();
+});
+
+// Después de prender o apagar el sonido, el destello o la vibración.
+function revisarMetronomo() {
+  if (marcaTiempos()) {
     asegurarAudio();
     reiniciarMetronomo();
     if (!audio.paused) arrancarMetronomo();
   } else {
     pararMetronomo();
   }
+}
+
+casillaMetronomoVisual.checked = metronomoVisual;
+casillaMetronomoVibracion.checked = metronomoVibracion;
+document.getElementById("fila-vibracion").hidden = !navigator.vibrate;
+casillaMetronomoVisual.addEventListener("change", () => {
+  metronomoVisual = casillaMetronomoVisual.checked;
+  try { localStorage.setItem("metronomoVisual", metronomoVisual ? "si" : "no"); } catch { /* queda para esta sesión */ }
+  revisarMetronomo();
+});
+casillaMetronomoVibracion.addEventListener("change", () => {
+  metronomoVibracion = casillaMetronomoVibracion.checked;
+  try { localStorage.setItem("metronomoVibracion", metronomoVibracion ? "si" : "no"); } catch { /* queda para esta sesión */ }
+  revisarMetronomo();
 });
 
 // Todo lo que cambia la relación entre la canción y el reloj obliga a recalcular.
@@ -1973,32 +2030,86 @@ audio.addEventListener("ratechange", reiniciarMetronomo);
    Velocidad (sin cambiar el tono)
    ------------------------------------------------------------------ */
 
-// Las velocidades posibles, de la más lenta a la más rápida.
-const VELOCIDADES = [0.5, 0.75, 1, 1.25, 1.5, 2];
+// Las velocidades posibles, de la más lenta a la más rápida: de x0.5 a x2
+// de a 0,05 (x0.5, x0.55 … x0.95, x1, x1.05 … x2).
+const VELOCIDADES = Array.from({ length: 31 }, (_, i) => Math.round((0.5 + i * 0.05) * 100) / 100);
+const redondearVelocidad = (v) => Math.min(2, Math.max(0.5, Math.round(v * 20) / 20));
 
 function textoVelocidad(v) {
-  return "x" + String(v);
+  return "x" + String(Math.round(v * 100) / 100);
 }
 
-function aplicarVelocidad(v) {
+const botonVelocidad = document.getElementById("boton-velocidad");
+const cajaVelocidad = document.getElementById("caja-velocidad");
+const cajaVelValor = document.getElementById("caja-vel-valor");
+const cajaVelMenos = document.getElementById("caja-vel-menos");
+const cajaVelMas = document.getElementById("caja-vel-mas");
+const cajaVelNormal = document.getElementById("caja-vel-normal");
+
+// "exacta": sin redondear a 0,05 (el entrenador de velocidad sube de a 1 %, si se elige).
+function aplicarVelocidad(v, exacta = false) {
+  v = exacta ? Math.min(2, Math.max(0.3, v)) : redondearVelocidad(v);
   // preservesPitch: el navegador estira el audio sin volverlo más agudo o grave.
   audio.preservesPitch = true;
   audio.defaultPlaybackRate = v;
   audio.playbackRate = v;
-  valorVelocidad.textContent = textoVelocidad(v);
-  velocidadMenos.disabled = v <= VELOCIDADES[0];
-  velocidadMas.disabled = v >= VELOCIDADES[VELOCIDADES.length - 1];
-  resumenOpciones.textContent = textoVelocidad(v);
+  const texto = textoVelocidad(v);
+  const minima = v <= VELOCIDADES[0], maxima = v >= VELOCIDADES[VELOCIDADES.length - 1];
+  valorVelocidad.textContent = texto;
+  velocidadMenos.disabled = minima;
+  velocidadMas.disabled = maxima;
+  resumenOpciones.textContent = texto;
+  botonVelocidad.textContent = texto;
+  botonVelocidad.classList.toggle("distinta", v !== 1);
+  cajaVelValor.textContent = texto;
+  cajaVelMenos.disabled = minima;
+  cajaVelMas.disabled = maxima;
+  cajaVelNormal.disabled = v === 1;
 }
 
-// − y + pasan a la velocidad anterior o siguiente de la lista.
-function cambiarVelocidad(paso) {
-  const actual = VELOCIDADES.indexOf(audio.playbackRate);
-  const nueva = VELOCIDADES[Math.min(VELOCIDADES.length - 1, Math.max(0, (actual < 0 ? 2 : actual) + paso))];
+// Cambia la velocidad y la recuerda para esta canción.
+function elegirVelocidad(v) {
+  const nueva = redondearVelocidad(v);
   aplicarVelocidad(nueva);
-  // Se recuerda por canción.
   if (idActual !== null) actualizarCancion(idActual, { velocidad: nueva }).catch(() => {});
 }
+
+// − y + pasan a la velocidad anterior o siguiente de la lista (de a 0,05).
+function cambiarVelocidad(paso) {
+  const actual = VELOCIDADES.findIndex((v) => Math.abs(v - audio.playbackRate) < 0.001);
+  const indice = actual < 0 ? VELOCIDADES.indexOf(1) : actual;
+  elegirVelocidad(VELOCIDADES[Math.min(VELOCIDADES.length - 1, Math.max(0, indice + paso))]);
+}
+
+// La cajita flotante del botón de velocidad: arriba del botón, sin abrir "Más".
+function abrirCajaVelocidad() {
+  cajaVelocidad.hidden = false;
+  botonVelocidad.setAttribute("aria-expanded", "true");
+  const boton = botonVelocidad.getBoundingClientRect();
+  const ancho = cajaVelocidad.offsetWidth, alto = cajaVelocidad.offsetHeight;
+  const izquierda = Math.min(innerWidth - ancho - 8, Math.max(8, boton.left + boton.width / 2 - ancho / 2));
+  const arriba = boton.top - alto - 8 >= 8 ? boton.top - alto - 8 : boton.bottom + 8;
+  cajaVelocidad.style.left = `${izquierda}px`;
+  cajaVelocidad.style.top = `${arriba}px`;
+}
+
+function cerrarCajaVelocidad() {
+  cajaVelocidad.hidden = true;
+  botonVelocidad.setAttribute("aria-expanded", "false");
+}
+
+botonVelocidad.addEventListener("click", () => {
+  if (cajaVelocidad.hidden) abrirCajaVelocidad();
+  else cerrarCajaVelocidad();
+});
+cajaVelMenos.addEventListener("click", () => cambiarVelocidad(-1));
+cajaVelMas.addEventListener("click", () => cambiarVelocidad(+1));
+cajaVelNormal.addEventListener("click", () => elegirVelocidad(1));
+// Tocar afuera la cierra.
+document.addEventListener("pointerdown", (evento) => {
+  if (!cajaVelocidad.hidden && !cajaVelocidad.contains(evento.target) && !botonVelocidad.contains(evento.target)) cerrarCajaVelocidad();
+}, true);
+addEventListener("resize", cerrarCajaVelocidad);
 
 velocidadMenos.addEventListener("click", () => cambiarVelocidad(-1));
 velocidadMas.addEventListener("click", () => cambiarVelocidad(+1));
@@ -2287,7 +2398,8 @@ function actualizarTira(t) {
 
   // El pulso actual queda a un tercio del borde izquierdo: se ve lo que viene.
   // Suave mientras avanza; si es un salto lejano (más de dos pantallas), directo.
-  if (!vistaPulsos.hidden) {
+  // Si el usuario deslizó la tira para mirar otra parte, no se mueve (seguir.js).
+  if (!vistaPulsos.hidden && vistaSincronizada) {
     const destino = celda.offsetLeft - tira.clientWidth / 3;
     const lejos = Math.abs(destino - tira.scrollLeft) > 2 * tira.clientWidth;
     tira.scrollTo({ left: destino, behavior: lejos ? "auto" : "smooth" });
@@ -2321,6 +2433,7 @@ function aplicarVista(nueva) {
   for (const celda of tira.querySelectorAll(".actual")) celda.classList.remove("actual");
   compasResaltado = -1;   // grilla.js
   actualizar();
+  alRedibujarVista();     // los corchetes del bucle, en la vista nueva (bucles.js)
 }
 
 botonVistaPulsos.addEventListener("click", () => aplicarVista("pulsos"));
@@ -2443,6 +2556,7 @@ function cambiarOpcionesAcordes() {
   dibujarTira();
   tira.scrollLeft = desplazamiento;
   dibujarLista();
+  transportarTablatura();   // también los trastes de la tablatura y el mástil (tablaturas.js)
   indiceActual = -1;
   indicePulso = -1;
   actualizar();
@@ -2562,7 +2676,7 @@ audio.addEventListener("play", () => {
   botonPlay.setAttribute("aria-label", "Pausar");
   pedirPantallaEncendida();
   requestAnimationFrame(bucle);
-  if (metronomoPrendido) arrancarMetronomo();
+  if (marcaTiempos()) arrancarMetronomo();
 });
 
 audio.addEventListener("pause", () => {
