@@ -53,6 +53,7 @@
 
 const contenedorMastil = document.getElementById("mastil");
 const selectorOrientacionMastil = document.getElementById("orientacion-mastil");
+const selectorEstiloMastil = document.getElementById("estilo-mastil");
 const selectorEtiquetaMastil = document.getElementById("etiqueta-mastil");
 const selectorAcordesOtra = document.getElementById("mastil-acordes-otra");
 const casillaEfectosReducidos = document.getElementById("mastil-efectos-reducidos");
@@ -77,7 +78,9 @@ let etiquetaMastil = "traste";          // "traste" | "nota"
 let acordesOtra = "normal";             // "normal" | "tenue": cómo se ven los acordes de la Guitarra 2
 let efectosReducidos = false;
 let coloresCuerda = { ...COLORES_ORIGINALES };
+let estiloMastil = "clasico";           // "clasico" (este archivo) | "3d" (mastil3d.js, experimental)
 try {
+  if (localStorage.getItem("mastilEstilo") === "3d") estiloMastil = "3d";
   if (localStorage.getItem("mastilOrientacion") === "vertical") orientacionMastil = "vertical";
   if (localStorage.getItem("mastilEtiqueta") === "nota") etiquetaMastil = "nota";
   if (localStorage.getItem("mastilAcordesOtra") === "tenue") acordesOtra = "tenue";
@@ -88,8 +91,11 @@ try {
   // valores por defecto
 }
 
-// Parado solo fuera del modo tocar: ahí el mástil va siempre acostado y grande (practica.js).
-const mastilParado = () => orientacionMastil === "vertical" && !(typeof modoTocar !== "undefined" && modoTocar);
+// El mástil en 3D (mastil3d.js) en lugar de este.
+const usar3D = () => estiloMastil === "3d";
+
+// Parado solo fuera del modo tocar y del 3D: ahí el mástil va siempre acostado y grande (practica.js).
+const mastilParado = () => orientacionMastil === "vertical" && !usar3D() && !(typeof modoTocar !== "undefined" && modoTocar);
 
 function guardarPreferencia(clave, valor) {
   try { localStorage.setItem(clave, valor); } catch { /* queda para esta sesión */ }
@@ -401,14 +407,21 @@ function dibujarMastil() {
   const hay = guitarrasMastil.some(Boolean);
   contenedorMastil.hidden = !hay;
   vistaTabs.classList.toggle("mastil-parado", hay && mastilParado());
+  vistaTabs.classList.toggle("mastil-3d", hay && usar3D());
   if (!hay) return;
+  // Estilo 3D: lo arma y lo dibuja mastil3d.js (este lienzo queda guardado para volver).
+  if (usar3D()) {
+    medidasMastil = null;
+    armarMastil3D();
+    return;
+  }
   if (!lienzo) {
     lienzo = document.createElement("canvas");
     lienzo.className = "lienzo-mastil";
     lienzo.setAttribute("aria-hidden", "true");
-    contenedorMastil.replaceChildren(lienzo);
     contexto2d = lienzo.getContext("2d");
   }
+  if (lienzo.parentElement !== contenedorMastil) contenedorMastil.replaceChildren(lienzo);
   // El lienzo se achica primero para que el contenedor tome el tamaño que le da la página.
   lienzo.style.width = "0px";
   lienzo.style.height = "0px";
@@ -447,6 +460,10 @@ function actualizarMastil() {
 }
 
 function pedirCuadro() {
+  if (usar3D()) {
+    pedirCuadro3D();
+    return;
+  }
   if (cuadroPedido || !medidasMastil || contenedorMastil.hidden || vistaTabs.hidden) return;
   cuadroPedido = true;
   requestAnimationFrame(dibujarCuadro);
@@ -901,7 +918,9 @@ function dibujarProxima(g, m, nota, evento, t) {
    ------------------------------------------------------------------ */
 
 function mostrarOpcionesMastil() {
+  selectorEstiloMastil.value = estiloMastil;
   selectorOrientacionMastil.value = orientacionMastil;
+  selectorOrientacionMastil.disabled = usar3D();   // el 3D va siempre acostado
   selectorEtiquetaMastil.value = etiquetaMastil;
   selectorAcordesOtra.value = acordesOtra;
   casillaEfectosReducidos.checked = efectosReducidos;
@@ -918,6 +937,20 @@ selectorOrientacionMastil.addEventListener("change", () => {
   if (apiTabs && tabsListas && !mastilParado()) apiTabs.render();
   if (tabsListas && mastilParado()) mostrarAvisoTabs("");
 });
+
+// Clásico (este archivo) o 3D (mastil3d.js). La tablatura pasa a un renglón con el 3D.
+selectorEstiloMastil.addEventListener("change", () => {
+  cambiarEstiloMastil(selectorEstiloMastil.value === "3d" ? "3d" : "clasico");
+});
+
+function cambiarEstiloMastil(estilo) {
+  estiloMastil = estilo;
+  guardarPreferencia("mastilEstilo", estiloMastil);
+  mostrarOpcionesMastil();
+  dibujarMastil();
+  ajustarTabsAlModo();     // un renglón de tablatura (3D) o las páginas de siempre (practica.js)
+  if (tabsListas && !mastilParado()) mostrarAvisoTabs("");
+}
 
 selectorEtiquetaMastil.addEventListener("change", () => {
   etiquetaMastil = selectorEtiquetaMastil.value;

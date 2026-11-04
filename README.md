@@ -72,6 +72,13 @@ modificar, copiados del paquete npm `@coderline/alphatab@1.8.4`, con la licencia
 alphaTab usa la fuente musical **Bravura** (Steinberg Media Technologies), publicada con la
 SIL Open Font License 1.1 (ver `app/lib/alphatab/font/Bravura-OFL.txt`).
 
+### three.js (mástil en 3D)
+
+El estilo experimental "3D" del mástil (vista Tabs) usa [three.js](https://threejs.org) **r158**
+(© 2010-2023 three.js authors), publicada con la licencia MIT: el archivo está en `app/lib/three/`
+sin modificar (`build/three.min.js` del paquete npm `three@0.158.0`), con la licencia completa en
+`app/lib/three/LICENSE.txt`. La guitarra, sus maderas y la tapa se arman por código, sin imágenes.
+
 ### chords-db (posiciones de acordes)
 
 Las posiciones de acordes de `app/acordes-extra.js` están convertidas de

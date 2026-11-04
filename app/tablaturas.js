@@ -303,7 +303,7 @@ function crearApiTabs() {
     display: {
       staveProfile: alphaTab.StaveProfile.Tab,   // solo tablatura (sin pentagrama)
       // En el modo tocar, un solo renglón que corre de costado (practica.js)
-      layoutMode: modoTocar ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page,
+      layoutMode: tablaturaEnRenglon() ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page,
       scale: zoomTabs,                           // más chica que antes; se cambia con − y +
       resources: {
         mainGlyphColor: "#f2f4f6",
@@ -322,7 +322,7 @@ function crearApiTabs() {
       scrollMode: vistaSincronizada ? alphaTab.ScrollMode.Continuous : alphaTab.ScrollMode.Off,
       scrollElement: cajaTabs,
       scrollOffsetY: margenCursor(),
-      scrollOffsetX: modoTocar ? DESPLAZAMIENTO_TOCAR : 0,
+      scrollOffsetX: tablaturaEnRenglon() ? DESPLAZAMIENTO_TOCAR : 0,
     },
   });
   conectarBucleConTabs();   // tocar dos compases arma el bucle A–B (practica.js)
@@ -433,7 +433,7 @@ function pintarPistas(partitura) {
 // Las dos guitarras; en el modo tocar, solo la Guitarra 1 (un renglón).
 function dibujarPistas() {
   const partitura = apiTabs.score;
-  const elegidas = modoTocar ? pistasElegidas.slice(0, 1) : pistasElegidas;
+  const elegidas = tablaturaEnRenglon() ? pistasElegidas.slice(0, 1) : pistasElegidas;
   const pistas = elegidas.filter((i) => i >= 0).map((i) => partitura.tracks[i]).filter(Boolean);
   if (pistas.length) apiTabs.renderTracks(pistas);
 }
@@ -670,6 +670,12 @@ function ubicarCapsula(pulso) {
   capsula.style.width = `${ancho}px`;
   capsula.style.top = `${origenY + renglon.y + 4}px`;
   capsula.style.height = `${Math.max(20, renglon.h - 8)}px`;
+  // En el renglón único (modo tocar, mástil 3D) el recuadro es bajo: se corre
+  // para abajo hasta la cápsula, así se ve el pentagrama (y no solo lo de arriba).
+  if (tablaturaEnRenglon() && vistaSincronizada) {
+    const arriba = origenY + renglon.y - 14;
+    if (Math.abs(cajaTabs.scrollTop - arriba) > 4) cajaTabs.scrollTop = arriba;
+  }
 }
 
 /* ------------------------------------------------------------------

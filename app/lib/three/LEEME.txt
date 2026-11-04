@@ -1,0 +1,6 @@
+three.js r158 (https://threejs.org, https://github.com/mrdoob/three.js)
+Licencia: MIT (ver LICENSE.txt).
+Archivo sin modificar: build/three.min.js del paquete npm three@0.158.0
+(la última versión que trae el archivo para usar sin módulos, así la app
+sigue funcionando abierta directo desde un archivo, sin servidor).
+Lo usa el mástil en 3D (mastil3d.js); se carga solo si se elige ese estilo.

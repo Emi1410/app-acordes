@@ -3419,3 +3419,38 @@ body.modo-tocar.controles-ocultos .barra-bucle {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ==================================================================
+   v3.6: mástil en 3D (mastil3d.js): arriba un renglón chico de
+   tablatura que corre de costado (como en el modo tocar) y abajo la
+   guitarra en 3D ocupando el resto de la vista
+   ================================================================== */
+.vista-tabs.mastil-3d {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vista-tabs.mastil-3d[hidden] {
+  display: none;
+}
+
+.vista-tabs.mastil-3d .caja-tabs {
+  flex: none;
+  height: clamp(84px, 16vh, 130px);
+  overflow-x: auto;
+  overflow-y: auto;
+  padding-top: 12px;              /* que no se corten los números de compás */
+}
+
+.vista-tabs.mastil-3d .mastil {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+  align-self: stretch;
+}
+
+.lienzo-mastil-3d {
+  display: block;
+  touch-action: none;
+}

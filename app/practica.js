@@ -193,13 +193,17 @@ botonSeguirSinGirar.addEventListener("click", () => {
   revisarGiro();
 });
 
+// Un solo renglón de tablatura que corre de costado: en el modo tocar y con el mástil en 3D.
+const tablaturaEnRenglon = () => modoTocar || usar3D();
+
 // alphaTab: un renglón que corre de costado (solo la Guitarra 1) o las páginas de siempre.
 function ajustarTabsAlModo() {
   if (!apiTabs) return;
-  const modo = modoTocar ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page;
+  const renglon = tablaturaEnRenglon();
+  const modo = renglon ? alphaTab.LayoutMode.Horizontal : alphaTab.LayoutMode.Page;
   if (apiTabs.settings.display.layoutMode === modo) return;
   apiTabs.settings.display.layoutMode = modo;
-  apiTabs.settings.player.scrollOffsetX = modoTocar ? DESPLAZAMIENTO_TOCAR : 0;
+  apiTabs.settings.player.scrollOffsetX = renglon ? DESPLAZAMIENTO_TOCAR : 0;
   apiTabs.updateSettings();
   cajaTabs.scrollLeft = 0;
   if (apiTabs.score) dibujarPistas();
