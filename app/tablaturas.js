@@ -616,8 +616,9 @@ borrarPuntos.addEventListener("click", () => {
    Cursor tipo cápsula
 
    En lugar de la línea de alphaTab (que queda invisible), un óvalo
-   alargado que encierra la columna de notas que suena, con un puntito
-   arriba. En cada cuadro se busca el pulso de la Guitarra 1 que suena
+   fino y alargado, verde, que encierra la columna de notas que suena de
+   la 1ª a la 6ª cuerda (de borde a borde del pentagrama), con un puntito
+   adentro, arriba (como el de Songsterr). En cada cuadro se busca el pulso de la Guitarra 1 que suena
    (también en pausa, al saltar) y la cápsula se ubica sobre él, con sus
    medidas en el dibujo, dentro de la caja de la tablatura: así se
    desplaza junto con ella.
@@ -663,13 +664,15 @@ function ubicarCapsula(pulso) {
   const caja = cajaTabs.getBoundingClientRect(), dibujo = superficie.getBoundingClientRect();
   const origenX = dibujo.left - caja.left + cajaTabs.scrollLeft;
   const origenY = dibujo.top - caja.top + cajaTabs.scrollTop;
+  // Las medidas del compás en su pentagrama van justo de la línea de la 1ª
+  // cuerda a la de la 6ª; la cápsula sobresale un poco de cada lado.
   const renglon = medidas.barBounds.realBounds;
   const x = medidas.onNotesX || medidas.visualBounds.x + medidas.visualBounds.w / 2;
-  const ancho = Math.max(18, Math.min(24, medidas.visualBounds.w + 6));
+  const ancho = 16, margen = 7;
   capsula.style.left = `${origenX + x - ancho / 2}px`;
   capsula.style.width = `${ancho}px`;
-  capsula.style.top = `${origenY + renglon.y + 4}px`;
-  capsula.style.height = `${Math.max(20, renglon.h - 8)}px`;
+  capsula.style.top = `${origenY + renglon.y - margen}px`;
+  capsula.style.height = `${renglon.h + 2 * margen}px`;
   // En el renglón único (modo tocar, mástil 3D) el recuadro es bajo: se corre
   // para abajo hasta la cápsula, así se ve el pentagrama (y no solo lo de arriba).
   if (tablaturaEnRenglon() && vistaSincronizada) {

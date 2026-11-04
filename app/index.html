@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=3.6">
+  <link rel="stylesheet" href="style.css?v=3.7">
 </head>
 <body>
 
@@ -341,8 +341,8 @@
     <button id="salir-modo-tocar" class="boton boton-chico salir-modo-tocar" type="button" hidden>✕ Salir</button>
   </section>
 
-  <!-- Metrónomo visual: destello suave en cada tiempo -->
-  <div id="destello" class="destello" aria-hidden="true"></div>
+  <!-- Metrónomo luminoso: un punto que destella en cada tiempo -->
+  <div id="luz-metronomo" class="luz-metronomo" aria-hidden="true" hidden></div>
 
   <!-- Velocidad: la cajita flotante del botón "x1" -->
   <div id="caja-velocidad" class="caja-velocidad" role="dialog" aria-label="Velocidad" hidden>
@@ -489,16 +489,10 @@
           <span>Cuenta “3, 2, 1” <small>(un compás antes de tocar)</small></span>
         </label>
 
-        <!-- Metrónomo visual: un destello en cada tiempo (aparte del sonido) -->
+        <!-- Metrónomo luminoso: un punto que destella en cada tiempo (aparte del sonido) -->
         <label class="interruptor">
           <input type="checkbox" id="metronomo-visual">
-          <span>Destello en cada tiempo <small>(sin sonido también)</small></span>
-        </label>
-
-        <!-- Vibración en cada tiempo (solo celulares Android) -->
-        <label class="interruptor" id="fila-vibracion">
-          <input type="checkbox" id="metronomo-vibracion">
-          <span>Vibrar en cada tiempo <small>(Android)</small></span>
+          <span>Metrónomo luminoso <small>(un punto que destella)</small></span>
         </label>
       </div>
 
@@ -743,27 +737,27 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=3.6"></script>
-  <script src="acordes.js?v=3.6"></script>
-  <script src="diagrama.js?v=3.6"></script>
-  <script src="biblioteca.js?v=3.6"></script>
-  <script src="analizador.js?v=3.6"></script>
-  <script src="app.js?v=3.6"></script>
-  <script src="editor.js?v=3.6"></script>
+  <script src="acordes-extra.js?v=3.7"></script>
+  <script src="acordes.js?v=3.7"></script>
+  <script src="diagrama.js?v=3.7"></script>
+  <script src="biblioteca.js?v=3.7"></script>
+  <script src="analizador.js?v=3.7"></script>
+  <script src="app.js?v=3.7"></script>
+  <script src="editor.js?v=3.7"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=3.6"></script>
-  <script src="mastil.js?v=3.6"></script>
-  <script src="mastil3d.js?v=3.6"></script>
-  <script src="sincronizar-solo.js?v=3.6"></script>
+  <script src="tablaturas.js?v=3.7"></script>
+  <script src="mastil.js?v=3.7"></script>
+  <script src="mastil3d.js?v=3.7"></script>
+  <script src="sincronizar-solo.js?v=3.7"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=3.6"></script>
+  <script src="acordes-tablatura.js?v=3.7"></script>
   <!-- Grilla por vueltas y partes de la canción -->
-  <script src="grilla.js?v=3.6"></script>
-  <script src="partes.js?v=3.6"></script>
+  <script src="grilla.js?v=3.7"></script>
+  <script src="partes.js?v=3.7"></script>
   <!-- Canciones desde archivos de Guitar Pro con el audio adentro -->
-  <script src="guitar-pro.js?v=3.6"></script>
-  <script src="practica.js?v=3.6"></script>
-  <script src="seguir.js?v=3.6"></script>
-  <script src="bucles.js?v=3.6"></script>
+  <script src="guitar-pro.js?v=3.7"></script>
+  <script src="practica.js?v=3.7"></script>
+  <script src="seguir.js?v=3.7"></script>
+  <script src="bucles.js?v=3.7"></script>
 </body>
 </html>

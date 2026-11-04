@@ -406,8 +406,7 @@ function marcarInicio([inicio, fin]) {
   bucleAB.estado = "esperandoB";
   bucleAB.a = inicio;
   bucleAB.finA = fin;
-  mostrarBucle();
-  mostrarMensaje("Inicio del bucle marcado: tocá el compás final");
+  mostrarBucle();   // (sin mensajes: el botón del bucle queda marcado mientras se espera el final)
 }
 
 function marcarFinal([inicio, fin], saltar) {
@@ -418,10 +417,6 @@ function marcarFinal([inicio, fin], saltar) {
   bucleAB.a = a;
   bucleAB.b = b;
   mostrarBucle();
-  const compases = pulsos.filter((p, i) => esCompas[i] && p + ajuste >= a - 0.03 && p + ajuste < b - 0.03).length;
-  mostrarMensaje(compases > 0
-    ? `Bucle de ${compases === 1 ? "1 compás" : `${compases} compases`} · arrastrá los corchetes para ajustarlo`
-    : "Bucle armado");
   // Tocando un compás en la tira o la tablatura, la canción se va a él: se vuelve al inicio.
   if (saltar) setTimeout(() => { audio.currentTime = bucleAB.a; actualizar(); }, 80);
 }
@@ -444,12 +439,10 @@ botonBucle.addEventListener("click", () => {
     bucleAB.b = fin;
     bucleAB.finA = fin;
     mostrarBucle();
-    mostrarMensaje("Bucle en este compás · arrastrá los corchetes para ajustarlo");
   } else if (bucleAB.estado === "esperandoB") {
     marcarFinal(compasDeTira(ahora), false);
   } else {
     sacarBucle();
-    mostrarMensaje("Sin bucle");
   }
 });
 

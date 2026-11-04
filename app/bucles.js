@@ -6,12 +6,14 @@
    El estado del bucle (bucleAB: a y b en segundos del mp3) y la vuelta
    al inicio están en practica.js. Acá está lo que se ve y se toca:
 
-   Corchetes: con el bucle activo, la zona que se repite se sombrea en
-   la vista que se esté mirando (tira de Pulsos, Grilla o tablatura), con
-   dos manijas, inicio y fin, que se arrastran con el dedo. Se mueven de
-   a pulso (no solo de a compás):
-     - Pulsos y Grilla: los pulsos del análisis (los casilleros);
-     - Tabs: las negras de la partitura, con la sincronización con el mp3.
+   Con el bucle activo, la zona que se repite se sombrea en la vista que
+   se esté mirando. En Pulsos y Grilla, solo la sombra. En Tabs, además,
+   dos corchetes verdes (inicio y fin, como en Songsterr) en el pentagrama
+   de la Guitarra 1 (o de la que se vea), que se arrastran como al
+   seleccionar texto en el celular: libres hacia adelante o hacia atrás,
+   también a otro renglón, y si el dedo llega al borde la tablatura se
+   desplaza sola. Se mueven de a pulso (las negras de la partitura, con
+   la sincronización con el mp3), no solo de a compás.
    Cada vista se adapta con tres funciones: dónde está cada pulso
    (puntos), qué rectángulos sombrear y qué pulso queda bajo el dedo.
 
@@ -110,6 +112,9 @@ function puntosDeTabs() {
       const compas = delCompas.masterBar || (delCompas.bars[0] && delCompas.bars[0].bar.masterBar);
       if (!compas) continue;
       const x0 = delCompas.realBounds.x, x1 = delCompas.realBounds.x + delCompas.realBounds.w;
+      // Solo en un pentagrama: el primero que se dibuja (la Guitarra 1; si no está, la 2).
+      // Sus medidas van de la línea de la 1ª cuerda a la de la 6ª.
+      const pentagrama = delCompas.bars[0] ? delCompas.bars[0].realBounds : caja;
       const inicio = compas.start, fin = compas.start + compas.calculateDuration();
       // Dónde dibujó alphaTab cada nota (tick → x); entre nota y nota, en línea recta.
       const marcas = [{ tick: inicio, x: x0 }];
@@ -127,9 +132,9 @@ function puntosDeTabs() {
         return a.x + (tick - a.tick) / Math.max(1, b.tick - a.tick) * (b.x - a.x);
       };
       for (let tick = inicio; tick < fin; tick += TICKS_NEGRA) {
-        puntos.push({ t: segundosDeTick(tick), x: origen.x + xDeTick(tick), y: origen.y + caja.y, alto: caja.h, fila });
+        puntos.push({ t: segundosDeTick(tick), x: origen.x + xDeTick(tick), y: origen.y + pentagrama.y - 6, alto: pentagrama.h + 12, fila });
       }
-      puntos.push({ t: segundosDeTick(fin), x: origen.x + x1, y: origen.y + caja.y, alto: caja.h, fila, finDeCompas: true });
+      puntos.push({ t: segundosDeTick(fin), x: origen.x + x1, y: origen.y + pentagrama.y - 6, alto: pentagrama.h + 12, fila, finDeCompas: true });
     }
   });
   puntosTabsGuardados = puntos;
@@ -138,9 +143,9 @@ function puntosDeTabs() {
 
 // La vista que se está mirando: { contenedor, puntos() }.
 function vistaDelBucle() {
-  if (!vistaTabs.hidden) return tabsListas ? { contenedor: cajaTabs, puntos: puntosDeTabs, nombre: "tabs" } : null;
-  if (!vistaPulsos.hidden) return { contenedor: tira, puntos: puntosDeTira, nombre: "pulsos" };
-  if (!lista.hidden) return { contenedor: lista, puntos: puntosDeGrilla, nombre: "grilla" };
+  if (!vistaTabs.hidden) return tabsListas ? { contenedor: cajaTabs, puntos: puntosDeTabs, nombre: "tabs", manijas: true } : null;
+  // (en la tira de Pulsos la sombra son los casilleros pintados: practica.js)
+  if (!lista.hidden) return { contenedor: lista, puntos: puntosDeGrilla, nombre: "grilla", manijas: false };
   return null;
 }
 
@@ -186,14 +191,15 @@ function dibujarCorchetes() {
   if (capaBucle.parentElement !== vista.contenedor) vista.contenedor.appendChild(capaBucle);
   const puntos = vista.puntos();
   if (puntos.length < 2) {
-    capaBucle.replaceChildren();
+    for (const viejo of [...capaBucle.querySelectorAll(".sombra-bucle")]) viejo.remove();
+    for (const manija of Object.values(manijas)) manija.hidden = true;
     return;
   }
   const inicio = puntoMasCerca(puntos, bucleAB.a, false);
   const fin = puntoMasCerca(puntos, bucleAB.b, true);
   const piezas = [];
   // La sombra: un rectángulo por renglón, desde el inicio hasta el fin.
-  if (vista.nombre !== "pulsos") {   // en la tira ya se pintan los casilleros (practica.js)
+  {
     const filas = new Map();
     for (const p of puntos) {
       if (p.t < inicio.t - 0.001 || p.t > fin.t + 0.001) continue;
@@ -205,51 +211,89 @@ function dibujarCorchetes() {
     for (const fila of filas.values()) {
       if (fila.x1 - fila.x0 < 1) continue;
       const sombra = document.createElement("div");
-      sombra.className = "sombra-bucle";
+      sombra.className = vista.manijas ? "sombra-bucle sombra-tabs" : "sombra-bucle";
       Object.assign(sombra.style, { left: `${fila.x0}px`, top: `${fila.y}px`, width: `${fila.x1 - fila.x0}px`, height: `${fila.alto}px` });
       piezas.push(sombra);
     }
   }
+  // Las sombras se cambian; las manijas NO se sacan de la página: si se sacaran
+  // mientras se arrastra una, el navegador soltaría el dedo (por eso antes no
+  // se podía arrastrar el final).
+  for (const viejo of [...capaBucle.querySelectorAll(".sombra-bucle")]) viejo.remove();
+  capaBucle.prepend(...piezas);
   for (const [lado, punto] of [["inicio", inicio], ["fin", fin]]) {
     const manija = manijas[lado];
+    manija.hidden = !vista.manijas;
+    if (manija.parentElement !== capaBucle) capaBucle.appendChild(manija);
     Object.assign(manija.style, { left: `${punto.x}px`, top: `${punto.y}px`, height: `${punto.alto}px` });
-    piezas.push(manija);
   }
-  capaBucle.replaceChildren(...piezas);
   capaBucle.dataset.vista = vista.nombre;
 }
 
-// Arrastrar una manija: el pulso más cerca del dedo (en el renglón bajo el dedo).
+// Arrastrar una manija: el pulso más cerca del dedo (en el renglón bajo el
+// dedo). Se escucha en toda la ventana, así el dedo puede ir a cualquier lado.
+let ultimoDedo = null;            // { x, y } en la pantalla, mientras se arrastra
+let temporizadorBorde = null;     // desplaza la tablatura si el dedo está en el borde
+
 function empezarArrastre(evento) {
   evento.preventDefault();
   evento.stopPropagation();
-  manijaArrastrada = evento.currentTarget.dataset.lado;
-  try { evento.currentTarget.setPointerCapture(evento.pointerId); } catch { /* sin captura: igual se sigue al dedo */ }
-  evento.currentTarget.classList.add("arrastrando");
-  const mover = (e) => moverManija(e);
+  const manija = evento.currentTarget;
+  manijaArrastrada = manija.dataset.lado;
+  try { manija.setPointerCapture(evento.pointerId); } catch { /* sin captura: igual se sigue al dedo */ }
+  manija.classList.add("arrastrando");
+  ultimoDedo = { x: evento.clientX, y: evento.clientY };
+  const mover = (e) => {
+    if (e.pointerId !== evento.pointerId) return;
+    ultimoDedo = { x: e.clientX, y: e.clientY };
+    moverManija(ultimoDedo);
+  };
   const soltar = (e) => {
-    e.currentTarget.removeEventListener("pointermove", mover);
-    e.currentTarget.removeEventListener("pointerup", soltar);
-    e.currentTarget.removeEventListener("pointercancel", soltar);
-    e.currentTarget.classList.remove("arrastrando");
+    if (e.pointerId !== evento.pointerId) return;
+    removeEventListener("pointermove", mover);
+    removeEventListener("pointerup", soltar);
+    removeEventListener("pointercancel", soltar);
+    cancelAnimationFrame(temporizadorBorde);
+    temporizadorBorde = null;
+    manija.classList.remove("arrastrando");
     manijaArrastrada = null;
+    ultimoDedo = null;
     mostrarBarraBucle();
-    // Si quedó adelante del inicio lo que suena, se vuelve al inicio del bucle.
+    dibujarCorchetes();
+    // Si lo que suena quedó afuera del bucle, se vuelve a su inicio.
     const ahora = posicionQueSuena(true);
     if (ahora < bucleAB.a - 0.05 || ahora > bucleAB.b + 0.05) { audio.currentTime = bucleAB.a; actualizar(); }
   };
-  evento.currentTarget.addEventListener("pointermove", mover);
-  evento.currentTarget.addEventListener("pointerup", soltar);
-  evento.currentTarget.addEventListener("pointercancel", soltar);
+  addEventListener("pointermove", mover);
+  addEventListener("pointerup", soltar);
+  addEventListener("pointercancel", soltar);
+  desplazarEnElBorde();
 }
 
-function moverManija(evento) {
+// Mientras se arrastra: si el dedo está cerca de un borde de la vista, la
+// tablatura se desplaza sola (más rápido cuanto más cerca) y la manija sigue al dedo.
+function desplazarEnElBorde() {
+  temporizadorBorde = requestAnimationFrame(desplazarEnElBorde);
+  const vista = vistaDelBucle();
+  if (!vista || !ultimoDedo) return;
+  const caja = vista.contenedor.getBoundingClientRect();
+  const zona = 44;
+  const velocidad = (distancia) => (distancia < zona ? Math.ceil((zona - Math.max(0, distancia)) / 3) : 0);
+  const dy = velocidad(ultimoDedo.y - caja.top) * -1 + velocidad(caja.bottom - ultimoDedo.y);
+  const dx = velocidad(ultimoDedo.x - caja.left) * -1 + velocidad(caja.right - ultimoDedo.x);
+  if (!dx && !dy) return;
+  const antes = [vista.contenedor.scrollLeft, vista.contenedor.scrollTop];
+  vista.contenedor.scrollBy(dx, dy);
+  if (vista.contenedor.scrollLeft !== antes[0] || vista.contenedor.scrollTop !== antes[1]) moverManija(ultimoDedo);
+}
+
+function moverManija(dedo) {
   const vista = vistaDelBucle();
   if (!vista || !manijaArrastrada) return;
   const puntos = vista.puntos();
   const caja = vista.contenedor.getBoundingClientRect();
-  const x = evento.clientX - caja.left + vista.contenedor.scrollLeft;
-  const y = evento.clientY - caja.top + vista.contenedor.scrollTop;
+  const x = dedo.x - caja.left + vista.contenedor.scrollLeft;
+  const y = dedo.y - caja.top + vista.contenedor.scrollTop;
   // El renglón bajo el dedo (o el más cercano) y, en él, el pulso más cerca.
   let mejor = null, distancia = Infinity;
   for (const p of puntos) {
@@ -321,10 +365,7 @@ function alCambiarBucle() {
   dibujarCorchetes();
 }
 
-botonSacarBucle.addEventListener("click", () => {
-  sacarBucle();
-  mostrarMensaje("Sin bucle");
-});
+botonSacarBucle.addEventListener("click", () => sacarBucle());
 
 // Elegir un bucle guardado: se activa y la canción va a su inicio.
 selectorBuclesGuardados.addEventListener("change", () => {
@@ -337,7 +378,6 @@ selectorBuclesGuardados.addEventListener("change", () => {
   mostrarBucle();
   audio.currentTime = guardado.a;
   actualizar();
-  mostrarMensaje(`Bucle “${guardado.nombre}”`);
 });
 
 // Guardar con un nombre (o borrar, si el bucle activo es uno guardado).

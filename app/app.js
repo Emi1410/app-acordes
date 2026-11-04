@@ -1897,33 +1897,44 @@ function sonarClic(cuando, primerTiempo) {
   };
 }
 
-/* Metrónomo visual y vibración: se programan junto con los clics (aunque el
-   sonido esté apagado) y se disparan cuando el tiempo se escucha. */
-const destello = document.getElementById("destello");
+/* Metrónomo luminoso: un punto chico que destella en cada tiempo (más fuerte
+   en el primero del compás), siempre en el mismo lugar: en el celular,
+   abajo a la izquierda, justo encima de los controles (que ahí están
+   siempre abajo), en Pulsos, Grilla, Tabs y en el modo tocar; en la compu,
+   en la esquina de abajo a la izquierda de la ventana. Se programa junto con los clics (aunque el sonido esté
+   apagado) y destella cuando el tiempo se escucha. */
+const luzMetronomo = document.getElementById("luz-metronomo");
 const casillaMetronomoVisual = document.getElementById("metronomo-visual");
-const casillaMetronomoVibracion = document.getElementById("metronomo-vibracion");
 let metronomoVisual = false;
-let metronomoVibracion = false;     // apagada si no se elige (solo anda en Android)
 try {
   metronomoVisual = localStorage.getItem("metronomoVisual") === "si";
-  metronomoVibracion = localStorage.getItem("metronomoVibracion") === "si";
-} catch { /* apagados */ }
+} catch { /* apagado */ }
 let marcasProgramadas = [];         // temporizadores de los destellos que vienen
 
-// ¿Hay que marcar los tiempos de alguna forma (sonido, destello o vibración)?
-const marcaTiempos = () => metronomoPrendido || metronomoVisual || metronomoVibracion;
+// ¿Hay que marcar los tiempos de alguna forma (sonido o luz)?
+const marcaTiempos = () => metronomoPrendido || metronomoVisual;
 
-// Un tiempo que se va a escuchar dentro de "segundos": destello y/o vibración.
+// El punto, justo encima de los controles (también si están escondidos en el modo tocar).
+function ubicarLuzMetronomo() {
+  luzMetronomo.hidden = !metronomoVisual || idActual === null || document.getElementById("pantalla-reproductor").hidden;
+  if (luzMetronomo.hidden) return;
+  const controles = document.querySelector(".reproductor").getBoundingClientRect();
+  luzMetronomo.style.top = `${Math.round(enCelular.matches || modoTocar ? controles.top - 22 : innerHeight - 30)}px`;
+}
+const enCelular = window.matchMedia("(max-width: 600px), (max-height: 500px)");
+enCelular.addEventListener("change", ubicarLuzMetronomo);
+// Al cambiar el tamaño, abrir una canción, volver a la biblioteca o entrar al modo tocar.
+new ResizeObserver(ubicarLuzMetronomo).observe(document.getElementById("pantalla-reproductor"));
+
+// Un tiempo que se va a escuchar dentro de "segundos": el punto destella.
 function marcarTiempo(segundos, primerTiempo) {
-  if (!metronomoVisual && !metronomoVibracion) return;
+  if (!metronomoVisual) return;
   const temporizador = setTimeout(() => {
     marcasProgramadas = marcasProgramadas.filter((t) => t !== temporizador);
-    if (metronomoVisual) {
-      destello.classList.remove("tiempo", "primero");
-      void destello.offsetWidth;   // reinicia la animación
-      destello.classList.add(primerTiempo ? "primero" : "tiempo");
-    }
-    if (metronomoVibracion && navigator.vibrate) navigator.vibrate(primerTiempo ? 45 : 20);
+    ubicarLuzMetronomo();
+    luzMetronomo.classList.remove("tiempo", "primero");
+    void luzMetronomo.offsetWidth;   // reinicia la animación
+    luzMetronomo.classList.add(primerTiempo ? "primero" : "tiempo");
   }, Math.max(0, segundos * 1000));
   marcasProgramadas.push(temporizador);
 }
@@ -1997,7 +2008,7 @@ botonMetronomo.addEventListener("click", () => {
   revisarMetronomo();
 });
 
-// Después de prender o apagar el sonido, el destello o la vibración.
+// Después de prender o apagar el sonido o la luz del metrónomo.
 function revisarMetronomo() {
   if (marcaTiempos()) {
     asegurarAudio();
@@ -2009,16 +2020,10 @@ function revisarMetronomo() {
 }
 
 casillaMetronomoVisual.checked = metronomoVisual;
-casillaMetronomoVibracion.checked = metronomoVibracion;
-document.getElementById("fila-vibracion").hidden = !navigator.vibrate;
 casillaMetronomoVisual.addEventListener("change", () => {
   metronomoVisual = casillaMetronomoVisual.checked;
   try { localStorage.setItem("metronomoVisual", metronomoVisual ? "si" : "no"); } catch { /* queda para esta sesión */ }
-  revisarMetronomo();
-});
-casillaMetronomoVibracion.addEventListener("change", () => {
-  metronomoVibracion = casillaMetronomoVibracion.checked;
-  try { localStorage.setItem("metronomoVibracion", metronomoVibracion ? "si" : "no"); } catch { /* queda para esta sesión */ }
+  ubicarLuzMetronomo();
   revisarMetronomo();
 });
 
@@ -2434,6 +2439,7 @@ function aplicarVista(nueva) {
   compasResaltado = -1;   // grilla.js
   actualizar();
   alRedibujarVista();     // los corchetes del bucle, en la vista nueva (bucles.js)
+  ubicarLuzMetronomo();
 }
 
 botonVistaPulsos.addEventListener("click", () => aplicarVista("pulsos"));

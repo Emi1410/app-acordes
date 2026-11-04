@@ -3296,34 +3296,6 @@ body.modo-tocar.controles-ocultos .salir-modo-tocar {
   flex: 1;
 }
 
-/* Metrónomo visual: un destello en todo el borde de la pantalla */
-.destello {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  pointer-events: none;
-  opacity: 0;
-  box-shadow: inset 0 0 70px 10px rgba(245, 184, 61, 0.55);
-}
-
-.destello.tiempo {
-  animation: destello-tiempo 0.22s ease-out;
-}
-
-.destello.primero {
-  animation: destello-primero 0.32s ease-out;
-}
-
-@keyframes destello-tiempo {
-  from { opacity: 0.45; }
-  to { opacity: 0; }
-}
-
-@keyframes destello-primero {
-  from { opacity: 1; background: rgba(245, 184, 61, 0.1); }
-  to { opacity: 0; background: transparent; }
-}
-
 /* Notas de la canción */
 #texto-notas {
   width: 100%;
@@ -3348,9 +3320,10 @@ body.modo-tocar.controles-ocultos .salir-modo-tocar {
   width: 100%;
 }
 
-/* Cursor de la tablatura: una cápsula que encierra la columna de notas que
-   suena, con un puntito arriba, en el amarillo de la app y un brillo suave
-   (tablaturas.js la ubica). La línea de alphaTab queda invisible. */
+/* Cursor de la tablatura (como el de Songsterr): una cápsula fina y verde
+   que encierra la columna de notas que suena, de la 1ª a la 6ª cuerda, con
+   un puntito adentro, arriba (tablaturas.js la ubica). La línea de alphaTab
+   queda invisible. */
 .caja-tabs .at-cursor-beat {
   opacity: 0;
 }
@@ -3359,24 +3332,24 @@ body.modo-tocar.controles-ocultos .salir-modo-tocar {
   position: absolute;
   z-index: 4;
   pointer-events: none;
-  border: 2px solid var(--acento);
+  border: 1.5px solid var(--verde);
   border-radius: 999px;
-  background: rgba(245, 184, 61, 0.12);
-  box-shadow: 0 0 10px rgba(245, 184, 61, 0.55), inset 0 0 8px rgba(245, 184, 61, 0.3);
+  background: rgba(43, 212, 107, 0.1);
+  box-shadow: 0 0 8px rgba(43, 212, 107, 0.45);
   transition: left 0.08s linear;
 }
 
+/* El puntito, adentro del óvalo, arriba */
 .capsula-cursor::before {
   content: "";
   position: absolute;
-  top: -10px;
+  top: 4px;
   left: 50%;
-  width: 6px;
-  height: 6px;
-  margin-left: -3px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
   border-radius: 50%;
-  background: var(--acento);
-  box-shadow: 0 0 6px rgba(245, 184, 61, 0.9);
+  background: var(--verde);
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
@@ -3453,4 +3426,143 @@ body.modo-tocar.controles-ocultos .barra-bucle {
 .lienzo-mastil-3d {
   display: block;
   touch-action: none;
+}
+
+/* ==================================================================
+   v3.7: correcciones comparando con Chordify y Songsterr
+   ================================================================== */
+
+:root {
+  --verde: #2bd46b;           /* "Activar", cursor y corchetes de la tablatura */
+}
+
+/* "Sincronización desactivada": chico, con "Activar" en verde. Lo ubica seguir.js */
+.aviso-sincronia {
+  transform: none;
+  top: auto;
+  left: auto;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 12px;
+  font-size: 0.82rem;
+}
+
+#activar-sincronia {
+  min-height: 30px;
+  padding: 0 12px;
+  border: none;
+  background: var(--verde);
+  color: #06210f;
+  font-weight: 800;
+}
+
+/* En Pulsos y Grilla: un globito arriba del casillero que suena, con su piquito */
+.aviso-sincronia.en-cursor::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  transform: rotate(45deg);
+  background: rgba(20, 24, 29, 0.96);
+  border-right: 1px solid var(--borde);
+  border-bottom: 1px solid var(--borde);
+}
+
+/* En Tabs: una barra abajo, encima de los controles */
+.aviso-sincronia.abajo {
+  justify-content: space-between;
+}
+
+/* Bucle en la tablatura: sombra y corchetes verdes, en un solo pentagrama */
+.sombra-tabs {
+  border-radius: 4px;
+  background: rgba(43, 212, 107, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(43, 212, 107, 0.4);
+}
+
+.manija-bucle[hidden] {
+  display: none;
+}
+
+.manija-bucle::before {
+  background: var(--verde);
+  box-shadow: 0 0 0 1px #0b0d10, 0 0 6px rgba(43, 212, 107, 0.6);
+}
+
+.manija-bucle::after {
+  border-color: var(--verde);
+}
+
+/* Metrónomo luminoso: un punto chico, abajo a la izquierda, encima de los controles */
+.luz-metronomo {
+  position: fixed;
+  z-index: 47;
+  left: 12px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: #3a3f46;
+  box-shadow: 0 0 0 2px rgba(11, 13, 16, 0.85);
+}
+
+.luz-metronomo[hidden] {
+  display: none;
+}
+
+.luz-metronomo.tiempo {
+  animation: luz-tiempo 0.25s ease-out;
+}
+
+.luz-metronomo.primero {
+  animation: luz-primero 0.35s ease-out;
+}
+
+@keyframes luz-tiempo {
+  from { background: var(--acento); box-shadow: 0 0 0 2px rgba(11, 13, 16, 0.85), 0 0 10px 3px rgba(245, 184, 61, 0.7); }
+  to { background: #3a3f46; }
+}
+
+@keyframes luz-primero {
+  from { background: #ffffff; transform: scale(1.35); box-shadow: 0 0 0 2px rgba(11, 13, 16, 0.85), 0 0 16px 6px rgba(245, 184, 61, 0.95); }
+  to { background: #3a3f46; transform: scale(1); }
+}
+
+/* Pulsos: diagramas más grandes y más arriba (como en Chordify) */
+.columna-diagrama {
+  justify-content: flex-start;
+  padding-top: 2vh;
+}
+
+.diagrama-par {
+  max-width: 190px;
+}
+
+.diagrama-par .diagrama {
+  max-height: 40dvh;
+}
+
+@media (max-width: 600px) and (orientation: portrait) {
+  .diagrama-par {
+    max-width: 172px;
+  }
+
+  .nombre-par {
+    font-size: 1.6rem;
+  }
+}
+
+/* Con el celular acostado los diagramas ya ocupan todo el alto: como estaban */
+@media (orientation: landscape) and (max-height: 500px) {
+  .columna-diagrama {
+    justify-content: center;
+    padding-top: 0;
+  }
+
+  .diagrama-par {
+    max-width: none;
+  }
 }
