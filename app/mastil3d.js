@@ -111,7 +111,10 @@ async function armarMastil3D() {
       return;
     }
   }
-  if (escena3D.renderer.domElement.parentElement !== contenedorMastil) contenedorMastil.replaceChildren(escena3D.renderer.domElement);
+  if (escena3D.renderer.domElement.parentElement !== contenedorMastil) {
+    contenedorMastil.replaceChildren(escena3D.renderer.domElement);
+    if (typeof parDiagramasTabs !== "undefined" && parDiagramasTabs) contenedorMastil.appendChild(parDiagramasTabs);
+  }
   contenedorMastil.dataset.dibujo = "3d";
   redimensionar3D();
   escena3D.saltar = true;       // la cámara va directo a la zona que suena

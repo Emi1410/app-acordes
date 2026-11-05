@@ -87,6 +87,14 @@ const nombreAhora = document.getElementById("nombre-ahora");
 const nombreDespues = document.getElementById("nombre-despues");
 const cuentaDespues = document.getElementById("cuenta-despues");
 
+// Acordes en la vista Tabs
+const parDiagramasTabs = document.getElementById("par-diagramas-tabs");
+const diagramaAhoraTab = document.getElementById("diagrama-ahora-tab");
+const diagramaDespuesTab = document.getElementById("diagrama-despues-tab");
+const nombreAhoraTab = document.getElementById("nombre-ahora-tab");
+const nombreDespuesTab = document.getElementById("nombre-despues-tab");
+const cuentaDespuesTab = document.getElementById("cuenta-despues-tab");
+
 /* ==================================================================
    Estado de la app
    ================================================================== */
@@ -1203,6 +1211,9 @@ async function cargarCancion(id) {
   acordeActual.textContent = "–";
   acordeSiguiente.textContent = "–";
   cuentaRegresiva.textContent = "";
+  if (nombreAhoraTab) nombreAhoraTab.textContent = "–";
+  if (nombreDespuesTab) nombreDespuesTab.textContent = "–";
+  if (cuentaDespuesTab) cuentaDespuesTab.textContent = "Sigue";
   mostrarAjuste();
   dibujarLista();
   prepararPulsos(cancion);
@@ -2238,6 +2249,7 @@ function actualizar() {
   const cuenta = siguiente ? `en ${faltan.toFixed(1)} s` : "";
   cuentaRegresiva.textContent = cuenta;
   cuentaDespues.textContent = cuenta || "Fin";
+  if (cuentaDespuesTab) cuentaDespuesTab.textContent = cuenta || "Fin";
 
   // Tira de pulsos: como "t" ya tiene restado el ajuste, los botones ±0.1 s
   // también corren el pulso resaltado.
@@ -2632,6 +2644,16 @@ function mostrarDiagramas() {
   // así la pantalla no salta.
   dibujarDiagramaPar(diagramaAhora, nombreAhora, actual ? actual.acorde : null);
   dibujarDiagramaPar(diagramaDespues, nombreDespues, siguiente ? siguiente.acorde : null);
+  if (diagramaAhoraTab) {
+    dibujarDiagramaPar(diagramaAhoraTab, nombreAhoraTab, actual ? actual.acorde : null);
+    dibujarDiagramaPar(diagramaDespuesTab, nombreDespuesTab, siguiente ? siguiente.acorde : null);
+    if (parDiagramasTabs) {
+      parDiagramasTabs.hidden = acordes.length === 0;
+      if (parDiagramasTabs.parentElement !== contenedorMastil && contenedorMastil) {
+        contenedorMastil.appendChild(parDiagramasTabs);
+      }
+    }
+  }
 }
 
 function dibujarDiagramaPar(boton, etiqueta, acorde) {
@@ -2671,6 +2693,12 @@ function cambiarPosicion(acorde) {
 diagramaActual.addEventListener("click", () => cambiarPosicion(acordes[indiceActual]));
 diagramaAhora.addEventListener("click", () => cambiarPosicion(acordes[indiceActual]));
 diagramaDespues.addEventListener("click", () => cambiarPosicion(acordes[indiceActual + 1]));
+if (diagramaAhoraTab) {
+  diagramaAhoraTab.addEventListener("click", () => cambiarPosicion(acordes[indiceActual]));
+}
+if (diagramaDespuesTab) {
+  diagramaDespuesTab.addEventListener("click", () => cambiarPosicion(acordes[indiceActual + 1]));
+}
 
 /* ==================================================================
    Controles del reproductor

@@ -7,7 +7,7 @@
   <!-- Color de la barra del navegador en Android -->
   <meta name="theme-color" content="#111418">
   <title>App Acordes</title>
-  <link rel="stylesheet" href="style.css?v=3.10">
+  <link rel="stylesheet" href="style.css?v=3.12">
 </head>
 <body>
 
@@ -229,7 +229,23 @@
       <div id="caja-tabs" class="caja-tabs"><div id="tabs"></div></div>
 
       <!-- Mástil virtual: las notas que suenan, en el tramo de trastes que se está usando (mastil.js) -->
-      <div id="mastil" class="mastil" hidden></div>
+      <div id="mastil" class="mastil" hidden>
+        <!-- Acordes flotantes en la esquina superior izquierda del mástil: actual (grande) y próximo (más chico) -->
+        <div id="par-diagramas-tabs" class="par-diagramas-tabs" hidden>
+          <div class="columna-diagrama columna-diagrama-tab actual">
+            <button id="diagrama-ahora-tab" class="diagrama-par diagrama-par-tab" type="button"
+                    aria-label="Cambiar la posición del acorde actual"></button>
+            <b id="nombre-ahora-tab" class="nombre-par nombre-par-tab">–</b>
+            <small class="rotulo-acorde-tab">Ahora</small>
+          </div>
+          <div class="columna-diagrama columna-diagrama-tab siguiente">
+            <button id="diagrama-despues-tab" class="diagrama-par diagrama-par-tab" type="button"
+                    aria-label="Cambiar la posición del próximo acorde"></button>
+            <b id="nombre-despues-tab" class="nombre-par nombre-par-tab">–</b>
+            <small id="cuenta-despues-tab" class="rotulo-acorde-tab">Sigue</small>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ===== Barra del editor de acordes (solo en modo edición) ===== -->
@@ -754,29 +770,29 @@
   <!-- El orden importa: app.js usa funciones de los otros archivos.
        Son scripts comunes (no módulos) para que funcionen abriendo el
        archivo directo desde la compu, sin servidor. -->
-  <script src="acordes-extra.js?v=3.10"></script>
-  <script src="acordes.js?v=3.10"></script>
-  <script src="diagrama.js?v=3.10"></script>
-  <script src="biblioteca.js?v=3.10"></script>
-  <script src="analizador.js?v=3.10"></script>
-  <script src="app.js?v=3.10"></script>
-  <script src="editor.js?v=3.10"></script>
+  <script src="acordes-extra.js?v=3.12"></script>
+  <script src="acordes.js?v=3.12"></script>
+  <script src="diagrama.js?v=3.12"></script>
+  <script src="biblioteca.js?v=3.12"></script>
+  <script src="analizador.js?v=3.12"></script>
+  <script src="app.js?v=3.12"></script>
+  <script src="editor.js?v=3.12"></script>
   <!-- La vista de tablaturas carga alphaTab (lib/alphatab) recién cuando se usa -->
-  <script src="tablaturas.js?v=3.10"></script>
-  <script src="mastil.js?v=3.10"></script>
-  <script src="mastil3d.js?v=3.10"></script>
-  <script src="foto-geometria.js?v=3.10"></script>
-  <script src="mastil-foto.js?v=3.10"></script>
-  <script src="sincronizar-solo.js?v=3.10"></script>
+  <script src="tablaturas.js?v=3.12"></script>
+  <script src="mastil.js?v=3.12"></script>
+  <script src="mastil3d.js?v=3.12"></script>
+  <script src="foto-geometria.js?v=3.12"></script>
+  <script src="mastil-foto.js?v=3.12"></script>
+  <script src="sincronizar-solo.js?v=3.12"></script>
   <!-- Acordes calculados con las notas de la tablatura -->
-  <script src="acordes-tablatura.js?v=3.10"></script>
+  <script src="acordes-tablatura.js?v=3.12"></script>
   <!-- Grilla por vueltas y partes de la canción -->
-  <script src="grilla.js?v=3.10"></script>
-  <script src="partes.js?v=3.10"></script>
+  <script src="grilla.js?v=3.12"></script>
+  <script src="partes.js?v=3.12"></script>
   <!-- Canciones desde archivos de Guitar Pro con el audio adentro -->
-  <script src="guitar-pro.js?v=3.10"></script>
-  <script src="practica.js?v=3.10"></script>
-  <script src="seguir.js?v=3.10"></script>
-  <script src="bucles.js?v=3.10"></script>
+  <script src="guitar-pro.js?v=3.12"></script>
+  <script src="practica.js?v=3.12"></script>
+  <script src="seguir.js?v=3.12"></script>
+  <script src="bucles.js?v=3.12"></script>
 </body>
 </html>

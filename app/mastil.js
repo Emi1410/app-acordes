@@ -433,7 +433,10 @@ function dibujarMastil() {
     lienzo.setAttribute("aria-hidden", "true");
     contexto2d = lienzo.getContext("2d");
   }
-  if (lienzo.parentElement !== contenedorMastil) contenedorMastil.replaceChildren(lienzo);
+  if (lienzo.parentElement !== contenedorMastil) {
+    contenedorMastil.replaceChildren(lienzo);
+    if (typeof parDiagramasTabs !== "undefined" && parDiagramasTabs) contenedorMastil.appendChild(parDiagramasTabs);
+  }
   // El lienzo se achica primero para que el contenedor tome el tamaño que le da la página.
   lienzo.style.width = "0px";
   lienzo.style.height = "0px";

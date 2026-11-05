@@ -3637,3 +3637,148 @@ body.modo-tocar.controles-ocultos .barra-bucle {
     grid-row: 1;
   }
 }
+
+/* ------------------------------------------------------------------
+   Diagramas de acordes flotantes en la esquina del mástil (vista Tabs)
+   ------------------------------------------------------------------ */
+.par-diagramas-tabs {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 6px 12px;
+  background: rgba(14, 17, 21, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  user-select: none;
+}
+
+.par-diagramas-tabs[hidden] {
+  display: none !important;
+}
+
+.columna-diagrama-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 0;
+}
+
+.diagrama-par-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--texto-suave);
+  font: inherit;
+  cursor: pointer;
+  position: relative;
+  min-height: 0;
+  width: auto;
+  max-width: none;
+}
+
+.diagrama-par-tab .diagrama {
+  display: block;
+  width: auto;
+  height: auto;
+  max-height: none;
+}
+
+/* Acorde actual: más grande, destacado en amarillo */
+.columna-diagrama-tab.actual .diagrama-par-tab .diagrama {
+  height: 62px;
+}
+
+.columna-diagrama-tab.actual .diagrama .punto {
+  fill: var(--acento);
+}
+
+.columna-diagrama-tab.actual .nombre-par-tab {
+  font-size: 1.25rem;
+  color: var(--acento);
+}
+
+/* Acorde siguiente: más chico, en blanco/gris */
+.columna-diagrama-tab.siguiente .diagrama-par-tab {
+  opacity: 0.88;
+}
+
+.columna-diagrama-tab.siguiente .diagrama-par-tab .diagrama {
+  height: 50px;
+}
+
+.columna-diagrama-tab.siguiente .nombre-par-tab {
+  font-size: 1.05rem;
+  color: var(--texto);
+}
+
+.nombre-par-tab {
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.rotulo-acorde-tab {
+  font-size: 0.72rem;
+  color: var(--texto-suave);
+  white-space: nowrap;
+}
+
+.diagrama-par-tab .posicion-diagrama {
+  font-size: 0.68rem;
+  color: var(--texto-suave);
+  margin-top: -2px;
+}
+
+/* En modo horizontal / celular apaisado chico */
+@media (max-height: 500px) and (orientation: landscape) {
+  .par-diagramas-tabs {
+    top: 6px;
+    left: 6px;
+    padding: 4px 8px;
+    gap: 8px;
+  }
+  .columna-diagrama-tab.actual .diagrama-par-tab .diagrama {
+    height: 48px;
+  }
+  .columna-diagrama-tab.siguiente .diagrama-par-tab .diagrama {
+    height: 38px;
+  }
+  .columna-diagrama-tab.actual .nombre-par-tab {
+    font-size: 1.05rem;
+  }
+  .columna-diagrama-tab.siguiente .nombre-par-tab {
+    font-size: 0.9rem;
+  }
+}
+
+/* Barra de desplazamiento oscura para la tablatura */
+.caja-tabs {
+  scrollbar-color: var(--borde) #0b0d10;
+  scrollbar-width: thin;
+}
+.caja-tabs::-webkit-scrollbar {
+  height: 6px;
+  background: #0b0d10;
+}
+.caja-tabs::-webkit-scrollbar-track {
+  background: #0b0d10;
+  border-radius: 3px;
+}
+.caja-tabs::-webkit-scrollbar-thumb {
+  background: var(--borde);
+  border-radius: 3px;
+}
+.caja-tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--texto-suave);
+}

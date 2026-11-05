@@ -35,11 +35,14 @@
    video de referencia:
      - la nota que suena: un anillo chico, del tamaño de la nota real
        sobre la cuerda, con un brillo suave (el número de traste, solo si
-       se elige en "Pistas y sync");
-     - las que vienen: el mismo anillo, tenue;
+       se elige en "Pistas y sync"). Las animaciones se adaptan a la
+       velocidad: en pasajes rápidos cambia al instante sin estelas ni
+       pulsaciones residuales que confundan;
+     - las que vienen: el mismo anillo, tenue, con anticipación que se
+       acorta en pasajes rápidos para no llenar el mástil;
      - la cuerda que suena: un hilo de luz fino, de un color apagado (se
        siguen distinguiendo), del dedo hacia el puente, vibrando en los
-       punteos (en los acordes, solo los anillos);
+       punteos lentos (en pasajes rápidos y acordes, sin oscilación brusca);
      - las técnicas del .gp.
    Las cuerdas de la foto quedan como están cuando no suenan.
 
@@ -139,7 +142,10 @@ async function armarMastilFoto() {
   }
   if (!usarFoto()) return;
   if (!escenaFoto) escenaFoto = crearEscenaFoto();
-  if (escenaFoto.lienzo.parentElement !== contenedorMastil) contenedorMastil.replaceChildren(escenaFoto.lienzo, escenaFoto.miniatura, escenaFoto.botonMiniatura);
+  if (escenaFoto.lienzo.parentElement !== contenedorMastil) {
+    contenedorMastil.replaceChildren(escenaFoto.lienzo, escenaFoto.miniatura, escenaFoto.botonMiniatura);
+    if (typeof parDiagramasTabs !== "undefined" && parDiagramasTabs) contenedorMastil.appendChild(parDiagramasTabs);
+  }
   contenedorMastil.dataset.dibujo = "foto";
   cargarFoto("entera");
   redimensionarFoto();
@@ -386,14 +392,18 @@ function colorApagado(hex) {
 
 // La cuerda que suena, del dedo al puente: un hilo de luz fino de su color
 // (apagado), con un brillo suave; vibra en los punteos (y ondula con vibrato).
+// En pasajes rápidos (notas cortas), se ilumina directa y nítida sin vibración residual.
 function dibujarLaserFoto(e, fila, cuerdas, activa, t, opacidad) {
   const { nota, evento } = activa;
   const estado = estadoDeNota(nota, evento, t);
   const xDedo = estado.traste > 0 ? xDeTrasteMm(estado.traste) - 1.5 : 0;
   const corrimiento = corrimientoEstiradaMm(fila, cuerdas, xDedo, estado.semitonos);
   const desdeAtaque = nota.continua ? 1e9 : t - evento.inicio;
-  const amplitud = efectosReducidos ? 0 : 0.9 * Math.exp(-Math.max(0, desdeAtaque) / 380);   // mm
-  const vibrato = nota.vibrato && !efectosReducidos;
+  const duracion = Math.max(1, evento.fin - evento.inicio);
+  const esRapida = duracion < 180;
+  const tiempoVibracion = esRapida ? 0 : Math.min(350, duracion * 0.6);
+  const amplitud = (efectosReducidos || tiempoVibracion === 0) ? 0 : 0.9 * Math.exp(-Math.max(0, desdeAtaque) / tiempoVibracion);   // mm
+  const vibrato = nota.vibrato && !efectosReducidos && !esRapida;
   const fase = t / 1000 * 2 * Math.PI * 9;
   const pasos = amplitud > 0.02 || vibrato || corrimiento ? 28 : 1;
   const camino = [];
@@ -449,8 +459,13 @@ function brilloSuave(g, p, radio, color, intensidad) {
 }
 
 // Una nota que viene: el mismo anillo chico que la que suena, tenue (más visible cuanto más cerca).
+// Cuanto más rápido es el pasaje, menos notas futuras se anticipan a la vez para no empastar la vista.
 function dibujarProximaFoto(e, nota, evento, t, cuerdas) {
-  const cerca = Math.max(0, Math.min(1, 1 - (evento.inicio - t) / ANTICIPO_MS));
+  const duracion = Math.max(1, evento.fin - evento.inicio);
+  const tiempoAnticipo = Math.min(ANTICIPO_MS, Math.max(220, duracion * 2.5));
+  const distancia = evento.inicio - t;
+  if (distancia > tiempoAnticipo) return;
+  const cerca = Math.max(0, Math.min(1, 1 - distancia / tiempoAnticipo));
   const p = punto(e, xDedoFotoMm(nota.traste), nota.fila, cuerdas);
   const radio = radioNotaFoto(e, nota.traste, nota.fila, cuerdas);
   const g = e.g;
@@ -484,10 +499,14 @@ function dibujarNotaFoto(e, nota, evento, t, opacidad, cuerdas, tecnicas) {
   let animada = false;
   g.globalAlpha = opacidad;
 
-  // Slide: la estela desde donde empezó
+  const duracion = Math.max(1, evento.fin - evento.inicio);
+  const esRapida = duracion < 180;
+
+  // Slide: la estela desde donde empezó (en pasajes rápidos no deja estela para no confundir)
   if (nota.slide) {
     tecnicas.add("slide");
-    if (!efectosReducidos) {
+    if (t < evento.fin) animada = true;
+    if (!efectosReducidos && !esRapida) {
       const desde = punto(e, xDedoFotoMm(nota.traste), nota.fila, cuerdas);
       if (Math.hypot(p.x - desde.x, p.y - desde.y) > 1) {
         const estela = g.createLinearGradient(desde.x, desde.y, p.x, p.y);
@@ -499,7 +518,6 @@ function dibujarNotaFoto(e, nota, evento, t, opacidad, cuerdas, tecnicas) {
         g.beginPath(); g.moveTo(desde.x, desde.y); g.lineTo(p.x, p.y); g.stroke();
         g.lineCap = "butt";
       }
-      animada = true;
     }
   }
   // Hammer-on / pull-off: un arco hasta la nota de llegada, con "h" o "p"
@@ -517,23 +535,25 @@ function dibujarNotaFoto(e, nota, evento, t, opacidad, cuerdas, tecnicas) {
     g.stroke();
     textoConBorde(g, sube ? "h" : "p", medio.x + arriba.x * 8, medio.y + arriba.y * 8, 12);
   }
-  // Tapping: un anillo que se abre al golpear
+  // Tapping: un anillo que se abre al golpear (se acorta o anula en pasajes rápidos)
   if (nota.tapping) {
     tecnicas.add("tapping");
+    const tiempoTapping = esRapida ? 0 : Math.min(260, duracion * 0.6);
     const desde = t - evento.inicio;
-    if (desde < 320 && !efectosReducidos) {
+    if (tiempoTapping > 0 && desde < tiempoTapping && !efectosReducidos) {
       g.strokeStyle = color;
       g.lineWidth = 1.5;
-      g.globalAlpha = opacidad * (1 - desde / 320);
-      g.beginPath(); g.arc(p.x, p.y, radio + desde / 320 * radio * 2.5, 0, Math.PI * 2); g.stroke();
+      g.globalAlpha = opacidad * (1 - desde / tiempoTapping);
+      g.beginPath(); g.arc(p.x, p.y, radio + desde / tiempoTapping * radio * 2.5, 0, Math.PI * 2); g.stroke();
       g.globalAlpha = opacidad;
       animada = true;
     }
   }
-  // Brillo suave alrededor (más fuerte al pulsar)
+  // Brillo suave alrededor (más fuerte al pulsar; en pasajes rápidos cambia al instante sin pulsaciones)
   if (!efectosReducidos) {
     const desde = nota.continua ? 1e9 : t - evento.inicio;
-    const pulso = desde < 450 ? 1 - desde / 450 : 0;
+    const tiempoPulso = esRapida ? 0 : Math.min(380, duracion * 0.5);
+    const pulso = tiempoPulso > 0 && desde < tiempoPulso ? 1 - desde / tiempoPulso : 0;
     brilloSuave(g, p, radio * (2.4 + 1.2 * pulso), color, 0.45 + 0.45 * pulso);
     if (pulso) animada = true;
   }
